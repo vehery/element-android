@@ -24,19 +24,18 @@ import im.vector.matrix.android.internal.database.mapper.asDomain
 import im.vector.matrix.android.internal.database.model.EventEntity
 import im.vector.matrix.android.internal.database.query.where
 import im.vector.matrix.android.internal.di.SessionDatabase
-import im.vector.matrix.android.internal.session.SessionScope
+import im.vector.matrix.android.internal.util.MatrixExecutors
 import io.realm.Realm
 import io.realm.RealmConfiguration
 import timber.log.Timber
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import javax.inject.Inject
 
-@SessionScope
 internal class TimelineEventDecryptor @Inject constructor(
         @SessionDatabase
         private val realmConfiguration: RealmConfiguration,
-        private val cryptoService: CryptoService
+        private val cryptoService: CryptoService,
+        private val matrixExecutors: MatrixExecutors
 ) {
 
     private val newSessionListener = object : NewSessionListener {
@@ -54,22 +53,25 @@ internal class TimelineEventDecryptor @Inject constructor(
         }
     }
 
-    private var executor: ExecutorService? = null
-
     // Set of eventIds which are currently decrypting
     private val existingRequests = mutableSetOf<DecryptionRequest>()
     // sessionId -> list of eventIds
     private val unknownSessionsFailure = mutableMapOf<String, MutableSet<DecryptionRequest>>()
 
+    private val processingFutures = mutableListOf<Future<*>>()
+
     fun start() {
-        executor = Executors.newSingleThreadExecutor()
         cryptoService.addNewSessionListener(newSessionListener)
     }
 
     fun destroy() {
         cryptoService.removeSessionListener(newSessionListener)
-        executor?.shutdownNow()
-        executor = null
+        synchronized(processingFutures) {
+            processingFutures.forEach {
+                it.cancel(false)
+            }
+            processingFutures.clear()
+        }
         synchronized(unknownSessionsFailure) {
             unknownSessionsFailure.clear()
         }
@@ -93,10 +95,13 @@ internal class TimelineEventDecryptor @Inject constructor(
                 return
             }
         }
-        executor?.execute {
+        val future = matrixExecutors.timelineEventDecryptor.submit {
             Realm.getInstance(realmConfiguration).use { realm ->
                 processDecryptRequest(request, realm)
             }
+        }
+        synchronized(processingFutures) {
+            processingFutures.add(future)
         }
     }
 
@@ -105,9 +110,13 @@ internal class TimelineEventDecryptor @Inject constructor(
         val timelineId = request.timelineId
         Timber.v("Decryption request for event $eventId")
         val eventEntity = EventEntity.where(realm, eventId = eventId).findFirst()
-                ?: return@executeTransaction Unit.also {
-                    Timber.d("Decryption request for unknown message")
-                }
+        if (eventEntity == null) {
+            Timber.d("Decryption request for unknown message")
+            synchronized(existingRequests) {
+                existingRequests.remove(request)
+            }
+            return@executeTransaction
+        }
         val event = eventEntity.asDomain()
         try {
             val result = cryptoService.decryptEvent(event, timelineId)

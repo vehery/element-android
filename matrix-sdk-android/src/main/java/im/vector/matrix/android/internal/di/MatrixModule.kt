@@ -21,6 +21,7 @@ import android.content.res.Resources
 import dagger.Module
 import dagger.Provides
 import im.vector.matrix.android.internal.util.MatrixCoroutineDispatchers
+import im.vector.matrix.android.internal.util.MatrixExecutors
 import im.vector.matrix.android.internal.util.createBackgroundHandler
 import im.vector.matrix.android.internal.util.newNamedSingleThreadExecutor
 import kotlinx.coroutines.Dispatchers
@@ -28,7 +29,6 @@ import kotlinx.coroutines.android.asCoroutineDispatcher
 import kotlinx.coroutines.asCoroutineDispatcher
 import org.matrix.olm.OlmManager
 import java.io.File
-import java.util.concurrent.Executors
 
 @Module
 internal object MatrixModule {
@@ -36,9 +36,19 @@ internal object MatrixModule {
     @JvmStatic
     @Provides
     @MatrixScope
-    fun providesMatrixCoroutineDispatchers(): MatrixCoroutineDispatchers {
+    fun providesMatrixExecutors(): MatrixExecutors {
+        return MatrixExecutors(
+                dbTransaction = newNamedSingleThreadExecutor("thread_db_transaction"),
+                timelineEventDecryptor = newNamedSingleThreadExecutor("thread_timeline_event_decryptor")
+        )
+    }
+
+    @JvmStatic
+    @Provides
+    @MatrixScope
+    fun providesMatrixCoroutineDispatchers(matrixExecutors: MatrixExecutors): MatrixCoroutineDispatchers {
         return MatrixCoroutineDispatchers(
-                dbTransaction = newNamedSingleThreadExecutor("thread_db_transaction").asCoroutineDispatcher(),
+                dbTransaction = matrixExecutors.dbTransaction.asCoroutineDispatcher(),
                 io = Dispatchers.IO,
                 computation = Dispatchers.Default,
                 main = Dispatchers.Main,

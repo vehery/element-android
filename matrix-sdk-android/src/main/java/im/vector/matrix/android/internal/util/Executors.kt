@@ -17,16 +17,8 @@
 package im.vector.matrix.android.internal.util
 
 import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
-import java.util.concurrent.ThreadFactory
 
-internal class NamedThreadFactory(private val name: String) : ThreadFactory {
-
-    override fun newThread(runnable: Runnable): Thread {
-        return Thread(runnable, name)
-    }
-}
-
-internal fun newNamedSingleThreadExecutor(name: String): ExecutorService {
-    return Executors.newSingleThreadExecutor(NamedThreadFactory(name))
-}
+data class MatrixExecutors(
+        val dbTransaction: ExecutorService,
+        val timelineEventDecryptor: ExecutorService
+)

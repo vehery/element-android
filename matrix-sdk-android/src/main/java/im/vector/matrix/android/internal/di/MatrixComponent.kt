@@ -30,6 +30,7 @@ import im.vector.matrix.android.internal.auth.SessionParamsStore
 import im.vector.matrix.android.internal.task.TaskExecutor
 import im.vector.matrix.android.internal.util.BackgroundDetectionObserver
 import im.vector.matrix.android.internal.util.MatrixCoroutineDispatchers
+import im.vector.matrix.android.internal.util.MatrixExecutors
 import okhttp3.OkHttpClient
 import org.matrix.olm.OlmManager
 import java.io.File
@@ -39,6 +40,8 @@ import java.io.File
 internal interface MatrixComponent {
 
     fun matrixCoroutineDispatchers(): MatrixCoroutineDispatchers
+
+    fun matrixExecutors(): MatrixExecutors
 
     fun moshi(): Moshi
 
