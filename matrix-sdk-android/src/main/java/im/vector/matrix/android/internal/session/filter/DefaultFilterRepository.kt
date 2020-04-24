@@ -21,12 +21,14 @@ import im.vector.matrix.android.internal.database.model.FilterEntity
 import im.vector.matrix.android.internal.database.model.FilterEntityFields
 import im.vector.matrix.android.internal.database.query.get
 import im.vector.matrix.android.internal.database.query.getOrCreate
+import im.vector.matrix.android.internal.util.MatrixCoroutineDispatchers
 import im.vector.matrix.android.internal.util.awaitTransaction
 import io.realm.Realm
 import io.realm.kotlin.where
 import javax.inject.Inject
 
-internal class DefaultFilterRepository @Inject constructor(private val monarchy: Monarchy) : FilterRepository {
+internal class DefaultFilterRepository @Inject constructor(private val monarchy: Monarchy,
+                                                           private val coroutineDispatchers: MatrixCoroutineDispatchers) : FilterRepository {
 
     override suspend fun storeFilter(filterBody: FilterBody, roomEventFilter: RoomEventFilter): Boolean {
         return Realm.getInstance(monarchy.realmConfiguration).use { realm ->
@@ -39,7 +41,7 @@ internal class DefaultFilterRepository @Inject constructor(private val monarchy:
             if (hasChanged) {
                 // Filter is new or has changed, store it and reset the filter Id.
                 // This has to be done outside of the Realm.use(), because awaitTransaction change the current thread
-                monarchy.awaitTransaction { realm ->
+                monarchy.awaitTransaction(coroutineDispatchers) { realm ->
                     // We manage only one filter for now
                     val filterBodyJson = filterBody.toJSONString()
                     val roomEventFilterJson = roomEventFilter.toJSONString()
@@ -56,7 +58,7 @@ internal class DefaultFilterRepository @Inject constructor(private val monarchy:
     }
 
     override suspend fun storeFilterId(filterBody: FilterBody, filterId: String) {
-        monarchy.awaitTransaction {
+        monarchy.awaitTransaction(coroutineDispatchers) {
             // We manage only one filter for now
             val filterBodyJson = filterBody.toJSONString()
 
@@ -69,7 +71,7 @@ internal class DefaultFilterRepository @Inject constructor(private val monarchy:
     }
 
     override suspend fun getFilter(): String {
-        return monarchy.awaitTransaction {
+        return monarchy.awaitTransaction(coroutineDispatchers) {
             val filter = FilterEntity.getOrCreate(it)
             if (filter.filterId.isBlank()) {
                 // Use the Json format
@@ -82,7 +84,7 @@ internal class DefaultFilterRepository @Inject constructor(private val monarchy:
     }
 
     override suspend fun getRoomFilter(): String {
-        return monarchy.awaitTransaction {
+        return monarchy.awaitTransaction(coroutineDispatchers) {
             FilterEntity.getOrCreate(it).roomEventFilterJson
         }
     }

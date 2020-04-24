@@ -93,6 +93,7 @@ import im.vector.matrix.android.internal.di.UserMd5
 import im.vector.matrix.android.internal.session.SessionScope
 import im.vector.matrix.android.internal.session.cache.ClearCacheTask
 import im.vector.matrix.android.internal.session.cache.RealmClearCacheTask
+import im.vector.matrix.android.internal.util.MatrixCoroutineDispatchers
 import io.realm.RealmConfiguration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -136,8 +137,9 @@ internal abstract class CryptoModule {
         @Provides
         @CryptoDatabase
         fun providesClearCacheTask(@CryptoDatabase
-                                   realmConfiguration: RealmConfiguration): ClearCacheTask {
-            return RealmClearCacheTask(realmConfiguration)
+                                   realmConfiguration: RealmConfiguration,
+                                   coroutineDispatchers: MatrixCoroutineDispatchers): ClearCacheTask {
+            return RealmClearCacheTask(realmConfiguration,coroutineDispatchers)
         }
 
         @JvmStatic

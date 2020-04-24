@@ -21,6 +21,7 @@ import dagger.Module
 import dagger.Provides
 import im.vector.matrix.android.api.session.cache.CacheService
 import im.vector.matrix.android.internal.di.SessionDatabase
+import im.vector.matrix.android.internal.util.MatrixCoroutineDispatchers
 import io.realm.RealmConfiguration
 
 @Module
@@ -31,8 +32,8 @@ internal abstract class CacheModule {
         @JvmStatic
         @Provides
         @SessionDatabase
-        fun providesClearCacheTask(@SessionDatabase realmConfiguration: RealmConfiguration): ClearCacheTask {
-            return RealmClearCacheTask(realmConfiguration)
+        fun providesClearCacheTask(@SessionDatabase realmConfiguration: RealmConfiguration, coroutineDispatchers: MatrixCoroutineDispatchers): ClearCacheTask {
+            return RealmClearCacheTask(realmConfiguration, coroutineDispatchers)
         }
     }
 

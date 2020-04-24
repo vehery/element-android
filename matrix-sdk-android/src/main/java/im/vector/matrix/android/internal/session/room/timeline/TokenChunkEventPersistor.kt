@@ -40,6 +40,7 @@ import im.vector.matrix.android.internal.database.query.getOrCreate
 import im.vector.matrix.android.internal.database.query.latestEvent
 import im.vector.matrix.android.internal.database.query.where
 import im.vector.matrix.android.internal.session.room.RoomSummaryUpdater
+import im.vector.matrix.android.internal.util.MatrixCoroutineDispatchers
 import im.vector.matrix.android.internal.util.awaitTransaction
 import io.realm.Realm
 import timber.log.Timber
@@ -48,7 +49,8 @@ import javax.inject.Inject
 /**
  * Insert Chunk in DB, and eventually merge with existing chunk event
  */
-internal class TokenChunkEventPersistor @Inject constructor(private val monarchy: Monarchy) {
+internal class TokenChunkEventPersistor @Inject constructor(private val monarchy: Monarchy,
+                                                            private val coroutineDispatchers: MatrixCoroutineDispatchers) {
 
     /**
      * <pre>
@@ -123,7 +125,7 @@ internal class TokenChunkEventPersistor @Inject constructor(private val monarchy
                            roomId: String,
                            direction: PaginationDirection): Result {
         monarchy
-                .awaitTransaction { realm ->
+                .awaitTransaction(coroutineDispatchers) { realm ->
                     Timber.v("Start persisting ${receivedChunk.events.size} events in $roomId towards $direction")
 
                     val nextToken: String?

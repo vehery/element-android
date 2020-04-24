@@ -22,6 +22,7 @@ import im.vector.matrix.android.api.auth.data.sessionId
 import im.vector.matrix.android.internal.auth.SessionParamsStore
 import im.vector.matrix.android.internal.database.awaitTransaction
 import im.vector.matrix.android.internal.di.AuthDatabase
+import im.vector.matrix.android.internal.util.MatrixCoroutineDispatchers
 import io.realm.Realm
 import io.realm.RealmConfiguration
 import io.realm.exceptions.RealmPrimaryKeyConstraintException
@@ -29,6 +30,7 @@ import timber.log.Timber
 import javax.inject.Inject
 
 internal class RealmSessionParamsStore @Inject constructor(private val mapper: SessionParamsMapper,
+                                                           private val coroutineDispatchers: MatrixCoroutineDispatchers,
                                                            @AuthDatabase
                                                            private val realmConfiguration: RealmConfiguration
 ) : SessionParamsStore {
@@ -64,7 +66,7 @@ internal class RealmSessionParamsStore @Inject constructor(private val mapper: S
     }
 
     override suspend fun save(sessionParams: SessionParams) {
-        awaitTransaction(realmConfiguration) {
+        awaitTransaction(coroutineDispatchers, realmConfiguration) {
             val entity = mapper.map(sessionParams)
             if (entity != null) {
                 try {
@@ -78,7 +80,7 @@ internal class RealmSessionParamsStore @Inject constructor(private val mapper: S
     }
 
     override suspend fun setTokenInvalid(sessionId: String) {
-        awaitTransaction(realmConfiguration) { realm ->
+        awaitTransaction(coroutineDispatchers, realmConfiguration) { realm ->
             val currentSessionParams = realm
                     .where(SessionParamsEntity::class.java)
                     .equalTo(SessionParamsEntityFields.SESSION_ID, sessionId)
@@ -97,7 +99,7 @@ internal class RealmSessionParamsStore @Inject constructor(private val mapper: S
     }
 
     override suspend fun updateCredentials(newCredentials: Credentials) {
-        awaitTransaction(realmConfiguration) { realm ->
+        awaitTransaction(coroutineDispatchers, realmConfiguration) { realm ->
             val currentSessionParams = realm
                     .where(SessionParamsEntity::class.java)
                     .equalTo(SessionParamsEntityFields.SESSION_ID, newCredentials.sessionId())
@@ -125,7 +127,7 @@ internal class RealmSessionParamsStore @Inject constructor(private val mapper: S
     }
 
     override suspend fun delete(sessionId: String) {
-        awaitTransaction(realmConfiguration) {
+        awaitTransaction(coroutineDispatchers, realmConfiguration) {
             it.where(SessionParamsEntity::class.java)
                     .equalTo(SessionParamsEntityFields.SESSION_ID, sessionId)
                     .findAll()
@@ -134,7 +136,7 @@ internal class RealmSessionParamsStore @Inject constructor(private val mapper: S
     }
 
     override suspend fun deleteAll() {
-        awaitTransaction(realmConfiguration) {
+        awaitTransaction(coroutineDispatchers, realmConfiguration) {
             it.where(SessionParamsEntity::class.java)
                     .findAll()
                     .deleteAllFromRealm()

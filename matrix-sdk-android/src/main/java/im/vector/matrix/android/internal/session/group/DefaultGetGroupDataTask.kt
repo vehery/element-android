@@ -25,6 +25,7 @@ import im.vector.matrix.android.internal.session.group.model.GroupRooms
 import im.vector.matrix.android.internal.session.group.model.GroupSummaryResponse
 import im.vector.matrix.android.internal.session.group.model.GroupUsers
 import im.vector.matrix.android.internal.task.Task
+import im.vector.matrix.android.internal.util.MatrixCoroutineDispatchers
 import im.vector.matrix.android.internal.util.awaitTransaction
 import org.greenrobot.eventbus.EventBus
 import javax.inject.Inject
@@ -35,6 +36,7 @@ internal interface GetGroupDataTask : Task<GetGroupDataTask.Params, Unit> {
 }
 
 internal class DefaultGetGroupDataTask @Inject constructor(
+        private val coroutineDispatchers: MatrixCoroutineDispatchers,
         private val groupAPI: GroupAPI,
         private val monarchy: Monarchy,
         private val eventBus: EventBus
@@ -59,7 +61,7 @@ internal class DefaultGetGroupDataTask @Inject constructor(
                            groupUsers: GroupUsers,
                            groupId: String) {
         monarchy
-                .awaitTransaction { realm ->
+                .awaitTransaction(coroutineDispatchers) { realm ->
                     val groupSummaryEntity = GroupSummaryEntity.where(realm, groupId).findFirst()
                             ?: realm.createObject(GroupSummaryEntity::class.java, groupId)
 

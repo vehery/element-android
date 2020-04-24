@@ -26,6 +26,7 @@ import im.vector.matrix.android.internal.database.mapper.toEntity
 import im.vector.matrix.android.internal.database.model.PusherEntity
 import im.vector.matrix.android.internal.database.query.where
 import im.vector.matrix.android.internal.network.executeRequest
+import im.vector.matrix.android.internal.util.MatrixCoroutineDispatchers
 import im.vector.matrix.android.internal.util.awaitTransaction
 import im.vector.matrix.android.internal.worker.SessionWorkerParams
 import im.vector.matrix.android.internal.worker.WorkerParamsFactory
@@ -47,6 +48,7 @@ internal class AddHttpPusherWorker(context: Context, params: WorkerParameters)
     @Inject lateinit var pushersAPI: PushersAPI
     @Inject lateinit var monarchy: Monarchy
     @Inject lateinit var eventBus: EventBus
+    @Inject lateinit var coroutineDispatchers: MatrixCoroutineDispatchers
 
     override suspend fun doWork(): Result {
         val params = WorkerParamsFactory.fromData<Params>(inputData)
@@ -68,7 +70,7 @@ internal class AddHttpPusherWorker(context: Context, params: WorkerParameters)
             when (exception) {
                 is Failure.NetworkConnection -> Result.retry()
                 else                         -> {
-                    monarchy.awaitTransaction { realm ->
+                    monarchy.awaitTransaction(coroutineDispatchers) { realm ->
                         PusherEntity.where(realm, pusher.pushKey).findFirst()?.let {
                             // update it
                             it.state = PusherState.FAILED_TO_REGISTER
@@ -84,7 +86,7 @@ internal class AddHttpPusherWorker(context: Context, params: WorkerParameters)
         executeRequest<Unit>(eventBus) {
             apiCall = pushersAPI.setPusher(pusher)
         }
-        monarchy.awaitTransaction { realm ->
+        monarchy.awaitTransaction(coroutineDispatchers) { realm ->
             val echo = PusherEntity.where(realm, pusher.pushKey).findFirst()
             if (echo != null) {
                 // update it

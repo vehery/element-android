@@ -15,14 +15,16 @@
  */
 package im.vector.matrix.android.internal.database
 
+import im.vector.matrix.android.internal.util.MatrixCoroutineDispatchers
 import io.realm.Realm
 import io.realm.RealmConfiguration
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import timber.log.Timber
+import kotlin.coroutines.CoroutineContext
 
-suspend fun <T> awaitTransaction(config: RealmConfiguration, transaction: suspend (realm: Realm) -> T) = withContext(Dispatchers.Default) {
+internal suspend fun <T> awaitTransaction(coroutineDispatchers: MatrixCoroutineDispatchers, config: RealmConfiguration, transaction: suspend (realm: Realm) -> T) = withContext(coroutineDispatchers.dbTransaction) {
     Realm.getInstance(config).use { bgRealm ->
         bgRealm.beginTransaction()
         val result: T

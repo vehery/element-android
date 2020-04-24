@@ -23,6 +23,7 @@ import im.vector.matrix.android.internal.database.model.RoomSummaryEntityFields
 import im.vector.matrix.android.internal.database.query.getOrCreate
 import im.vector.matrix.android.internal.database.query.where
 import im.vector.matrix.android.internal.task.Task
+import im.vector.matrix.android.internal.util.MatrixCoroutineDispatchers
 import im.vector.matrix.android.internal.util.awaitTransaction
 import io.realm.RealmList
 import javax.inject.Inject
@@ -37,11 +38,12 @@ internal interface SaveBreadcrumbsTask : Task<SaveBreadcrumbsTask.Params, Unit> 
 }
 
 internal class DefaultSaveBreadcrumbsTask @Inject constructor(
-        private val monarchy: Monarchy
+        private val monarchy: Monarchy,
+        private val coroutineDispatchers: MatrixCoroutineDispatchers
 ) : SaveBreadcrumbsTask {
 
     override suspend fun execute(params: SaveBreadcrumbsTask.Params) {
-        monarchy.awaitTransaction { realm ->
+        monarchy.awaitTransaction(coroutineDispatchers) { realm ->
             // Get or create a breadcrumbs entity
             val entity = BreadcrumbsEntity.getOrCreate(realm)
 

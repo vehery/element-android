@@ -26,6 +26,7 @@ import im.vector.matrix.android.internal.session.notification.ProcessEventForPus
 import im.vector.matrix.android.internal.session.reportSubtask
 import im.vector.matrix.android.internal.session.sync.model.RoomsSyncResponse
 import im.vector.matrix.android.internal.session.sync.model.SyncResponse
+import im.vector.matrix.android.internal.util.MatrixCoroutineDispatchers
 import im.vector.matrix.android.internal.util.awaitTransaction
 import timber.log.Timber
 import javax.inject.Inject
@@ -40,6 +41,7 @@ internal class SyncResponseHandler @Inject constructor(private val monarchy: Mon
                                                        private val tokenStore: SyncTokenStore,
                                                        private val processEventForPushTask: ProcessEventForPushTask,
                                                        private val pushRuleService: PushRuleService,
+                                                       private val coroutineDispatchers: MatrixCoroutineDispatchers,
                                                        private val initialSyncProgressService: DefaultInitialSyncProgressService) {
 
     suspend fun handleResponse(syncResponse: SyncResponse, fromToken: String?) {
@@ -70,7 +72,7 @@ internal class SyncResponseHandler @Inject constructor(private val monarchy: Mon
         }
 
         // Start one big transaction
-        monarchy.awaitTransaction { realm ->
+        monarchy.awaitTransaction(coroutineDispatchers) { realm ->
             measureTimeMillis {
                 Timber.v("Handle rooms")
                 reportSubtask(reporter, R.string.initial_sync_start_importing_account_rooms, 100, 0.7f) {

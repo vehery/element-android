@@ -26,6 +26,7 @@ import im.vector.matrix.android.internal.database.model.GroupSummaryEntity
 import im.vector.matrix.android.internal.database.query.where
 import im.vector.matrix.android.internal.di.SessionId
 import im.vector.matrix.android.internal.di.WorkManagerProvider
+import im.vector.matrix.android.internal.util.MatrixCoroutineDispatchers
 import im.vector.matrix.android.internal.worker.WorkerParamsFactory
 import io.realm.OrderedCollectionChangeSet
 import io.realm.RealmResults
@@ -37,6 +38,7 @@ private const val GET_GROUP_DATA_WORKER = "GET_GROUP_DATA_WORKER"
 internal class GroupSummaryUpdater @Inject constructor(
         private val workManagerProvider: WorkManagerProvider,
         @SessionId private val sessionId: String,
+        private val coroutineDispatchers: MatrixCoroutineDispatchers,
         private val monarchy: Monarchy)
     : RealmLiveEntityObserver<GroupEntity>(monarchy.realmConfiguration) {
 
@@ -82,7 +84,7 @@ internal class GroupSummaryUpdater @Inject constructor(
     /**
      * Delete the GroupSummaryEntity of left groups
      */
-    private suspend fun deleteGroups(groupIds: List<String>) = awaitTransaction(monarchy.realmConfiguration) { realm ->
+    private suspend fun deleteGroups(groupIds: List<String>) = awaitTransaction(coroutineDispatchers, monarchy.realmConfiguration) { realm ->
         GroupSummaryEntity.where(realm, groupIds)
                 .findAll()
                 .deleteAllFromRealm()

@@ -34,6 +34,7 @@ import im.vector.matrix.android.internal.session.room.read.SetReadMarkersTask
 import im.vector.matrix.android.internal.session.user.accountdata.DirectChatsHelper
 import im.vector.matrix.android.internal.session.user.accountdata.UpdateUserAccountDataTask
 import im.vector.matrix.android.internal.task.Task
+import im.vector.matrix.android.internal.util.MatrixCoroutineDispatchers
 import im.vector.matrix.android.internal.util.awaitTransaction
 import io.realm.RealmConfiguration
 import kotlinx.coroutines.TimeoutCancellationException
@@ -51,6 +52,7 @@ internal class DefaultCreateRoomTask @Inject constructor(
         private val readMarkersTask: SetReadMarkersTask,
         @SessionDatabase
         private val realmConfiguration: RealmConfiguration,
+        private val coroutineDispatchers: MatrixCoroutineDispatchers,
         private val crossSigningService: CrossSigningService,
         private val deviceListManager: DeviceListManager,
         private val eventBus: EventBus
@@ -109,7 +111,7 @@ internal class DefaultCreateRoomTask @Inject constructor(
         val otherUserId = params.getFirstInvitedUserId()
                 ?: throw IllegalStateException("You can't create a direct room without an invitedUser")
 
-        monarchy.awaitTransaction { realm ->
+        monarchy.awaitTransaction(coroutineDispatchers) { realm ->
             RoomSummaryEntity.where(realm, roomId).findFirst()?.apply {
                 this.directUserId = otherUserId
                 this.isDirect = true

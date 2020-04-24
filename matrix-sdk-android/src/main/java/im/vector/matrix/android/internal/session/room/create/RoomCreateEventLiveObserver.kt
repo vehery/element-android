@@ -30,6 +30,7 @@ import im.vector.matrix.android.internal.database.model.RoomSummaryEntity
 import im.vector.matrix.android.internal.database.query.where
 import im.vector.matrix.android.internal.database.query.whereTypes
 import im.vector.matrix.android.internal.di.SessionDatabase
+import im.vector.matrix.android.internal.util.MatrixCoroutineDispatchers
 import io.realm.OrderedCollectionChangeSet
 import io.realm.RealmConfiguration
 import io.realm.RealmResults
@@ -37,7 +38,8 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 internal class RoomCreateEventLiveObserver @Inject constructor(@SessionDatabase
-                                                               realmConfiguration: RealmConfiguration)
+                                                               realmConfiguration: RealmConfiguration,
+                                                               private val coroutineDispatchers: MatrixCoroutineDispatchers)
     : RealmLiveEntityObserver<EventEntity>(realmConfiguration) {
 
     override val query = Monarchy.Query<EventEntity> {
@@ -58,7 +60,7 @@ internal class RoomCreateEventLiveObserver @Inject constructor(@SessionDatabase
                 }
     }
 
-    private suspend fun handleRoomCreateEvents(createEvents: List<Event>) = awaitTransaction(realmConfiguration) { realm ->
+    private suspend fun handleRoomCreateEvents(createEvents: List<Event>) = awaitTransaction(coroutineDispatchers, realmConfiguration) { realm ->
         for (event in createEvents) {
             val createRoomContent = event.getClearContent().toModel<RoomCreateContent>()
             val predecessorRoomId = createRoomContent?.predecessor?.roomId ?: continue

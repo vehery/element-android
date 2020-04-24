@@ -30,6 +30,7 @@ import im.vector.matrix.android.internal.session.room.RoomAPI
 import im.vector.matrix.android.internal.session.sync.ReadReceiptHandler
 import im.vector.matrix.android.internal.session.sync.RoomFullyReadHandler
 import im.vector.matrix.android.internal.task.Task
+import im.vector.matrix.android.internal.util.MatrixCoroutineDispatchers
 import im.vector.matrix.android.internal.util.awaitTransaction
 import io.realm.Realm
 import org.greenrobot.eventbus.EventBus
@@ -56,6 +57,7 @@ internal class DefaultSetReadMarkersTask @Inject constructor(
         private val monarchy: Monarchy,
         private val roomFullyReadHandler: RoomFullyReadHandler,
         private val readReceiptHandler: ReadReceiptHandler,
+        private val coroutineDispatchers: MatrixCoroutineDispatchers,
         @UserId private val userId: String,
         private val eventBus: EventBus
 ) : SetReadMarkersTask {
@@ -108,7 +110,7 @@ internal class DefaultSetReadMarkersTask @Inject constructor(
             }
 
     private suspend fun updateDatabase(roomId: String, markers: HashMap<String, String>, shouldUpdateRoomSummary: Boolean) {
-        monarchy.awaitTransaction { realm ->
+        monarchy.awaitTransaction(coroutineDispatchers) { realm ->
             val readMarkerId = markers[READ_MARKER]
             val readReceiptId = markers[READ_RECEIPT]
             if (readMarkerId != null) {

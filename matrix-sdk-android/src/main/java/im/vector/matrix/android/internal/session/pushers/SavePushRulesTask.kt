@@ -22,6 +22,7 @@ import im.vector.matrix.android.api.pushrules.rest.GetPushRulesResponse
 import im.vector.matrix.android.internal.database.mapper.PushRulesMapper
 import im.vector.matrix.android.internal.database.model.PushRulesEntity
 import im.vector.matrix.android.internal.task.Task
+import im.vector.matrix.android.internal.util.MatrixCoroutineDispatchers
 import im.vector.matrix.android.internal.util.awaitTransaction
 import javax.inject.Inject
 
@@ -32,10 +33,11 @@ internal interface SavePushRulesTask : Task<SavePushRulesTask.Params, Unit> {
     data class Params(val pushRules: GetPushRulesResponse)
 }
 
-internal class DefaultSavePushRulesTask @Inject constructor(private val monarchy: Monarchy) : SavePushRulesTask {
+internal class DefaultSavePushRulesTask @Inject constructor(private val monarchy: Monarchy,
+                                                            private val coroutineDispatchers: MatrixCoroutineDispatchers) : SavePushRulesTask {
 
     override suspend fun execute(params: SavePushRulesTask.Params) {
-        monarchy.awaitTransaction { realm ->
+        monarchy.awaitTransaction(coroutineDispatchers) { realm ->
             // clear current push rules
             realm.where(PushRulesEntity::class.java)
                     .findAll()

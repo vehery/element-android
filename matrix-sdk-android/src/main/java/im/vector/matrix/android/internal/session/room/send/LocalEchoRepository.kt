@@ -36,6 +36,7 @@ import im.vector.matrix.android.internal.database.query.where
 import im.vector.matrix.android.internal.session.room.RoomSummaryUpdater
 import im.vector.matrix.android.internal.session.room.membership.RoomMemberHelper
 import im.vector.matrix.android.internal.session.room.timeline.DefaultTimeline
+import im.vector.matrix.android.internal.util.MatrixCoroutineDispatchers
 import im.vector.matrix.android.internal.util.awaitTransaction
 import io.realm.Realm
 import org.greenrobot.eventbus.EventBus
@@ -45,6 +46,7 @@ import javax.inject.Inject
 internal class LocalEchoRepository @Inject constructor(private val monarchy: Monarchy,
                                                        private val roomSummaryUpdater: RoomSummaryUpdater,
                                                        private val eventBus: EventBus,
+                                                       private val coroutineDispatchers: MatrixCoroutineDispatchers,
                                                        private val timelineEventMapper: TimelineEventMapper) {
 
     suspend fun createLocalEcho(event: Event) {
@@ -69,7 +71,7 @@ internal class LocalEchoRepository @Inject constructor(private val monarchy: Mon
         }
         val timelineEvent = timelineEventMapper.map(timelineEventEntity)
         eventBus.post(DefaultTimeline.OnLocalEchoCreated(roomId = roomId, timelineEvent = timelineEvent))
-        monarchy.awaitTransaction { realm ->
+        monarchy.awaitTransaction(coroutineDispatchers) { realm ->
             val roomEntity = RoomEntity.where(realm, roomId = roomId).findFirst() ?: return@awaitTransaction
             roomEntity.sendingTimelineEvents.add(0, timelineEventEntity)
             roomSummaryUpdater.update(realm, roomId)
@@ -77,14 +79,14 @@ internal class LocalEchoRepository @Inject constructor(private val monarchy: Mon
     }
 
     suspend fun deleteFailedEcho(roomId: String, localEcho: TimelineEvent) {
-        monarchy.awaitTransaction { realm ->
+        monarchy.awaitTransaction(coroutineDispatchers) { realm ->
             TimelineEventEntity.where(realm, roomId = roomId, eventId = localEcho.root.eventId ?: "").findFirst()?.deleteFromRealm()
             EventEntity.where(realm, eventId = localEcho.root.eventId ?: "").findFirst()?.deleteFromRealm()
         }
     }
 
     suspend fun clearSendingQueue(roomId: String) {
-        monarchy.awaitTransaction { realm ->
+        monarchy.awaitTransaction(coroutineDispatchers) { realm ->
             RoomEntity.where(realm, roomId).findFirst()?.let { room ->
                 room.sendingTimelineEvents.forEach {
                     it.root?.sendState = SendState.UNDELIVERED
@@ -94,7 +96,7 @@ internal class LocalEchoRepository @Inject constructor(private val monarchy: Mon
     }
 
     suspend fun updateSendState(roomId: String, eventIds: List<String>, sendState: SendState) {
-        monarchy.awaitTransaction { realm ->
+        monarchy.awaitTransaction(coroutineDispatchers) { realm ->
             val timelineEvents = TimelineEventEntity.where(realm, roomId, eventIds).findAll()
             timelineEvents.forEach {
                 it.root?.sendState = sendState

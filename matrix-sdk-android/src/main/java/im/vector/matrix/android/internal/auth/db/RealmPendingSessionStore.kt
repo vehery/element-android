@@ -19,17 +19,19 @@ package im.vector.matrix.android.internal.auth.db
 import im.vector.matrix.android.internal.auth.PendingSessionStore
 import im.vector.matrix.android.internal.database.awaitTransaction
 import im.vector.matrix.android.internal.di.AuthDatabase
+import im.vector.matrix.android.internal.util.MatrixCoroutineDispatchers
 import io.realm.Realm
 import io.realm.RealmConfiguration
 import javax.inject.Inject
 
 internal class RealmPendingSessionStore @Inject constructor(private val mapper: PendingSessionMapper,
+                                                            private val coroutineDispatchers: MatrixCoroutineDispatchers,
                                                             @AuthDatabase
                                                             private val realmConfiguration: RealmConfiguration
 ) : PendingSessionStore {
 
     override suspend fun savePendingSessionData(pendingSessionData: PendingSessionData) {
-        awaitTransaction(realmConfiguration) { realm ->
+        awaitTransaction(coroutineDispatchers, realmConfiguration) { realm ->
             val entity = mapper.map(pendingSessionData)
             if (entity != null) {
                 realm.where(PendingSessionEntity::class.java)
@@ -52,7 +54,7 @@ internal class RealmPendingSessionStore @Inject constructor(private val mapper: 
     }
 
     override suspend fun delete() {
-        awaitTransaction(realmConfiguration) {
+        awaitTransaction(coroutineDispatchers, realmConfiguration) {
             it.where(PendingSessionEntity::class.java)
                     .findAll()
                     .deleteAllFromRealm()

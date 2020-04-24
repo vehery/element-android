@@ -22,6 +22,7 @@ import im.vector.matrix.android.internal.database.model.HomeServerCapabilitiesEn
 import im.vector.matrix.android.internal.database.query.getOrCreate
 import im.vector.matrix.android.internal.network.executeRequest
 import im.vector.matrix.android.internal.task.Task
+import im.vector.matrix.android.internal.util.MatrixCoroutineDispatchers
 import im.vector.matrix.android.internal.util.awaitTransaction
 import org.greenrobot.eventbus.EventBus
 import java.util.Date
@@ -32,12 +33,13 @@ internal interface GetHomeServerCapabilitiesTask : Task<Unit, Unit>
 internal class DefaultGetHomeServerCapabilitiesTask @Inject constructor(
         private val capabilitiesAPI: CapabilitiesAPI,
         private val monarchy: Monarchy,
+        private val coroutineDispatchers: MatrixCoroutineDispatchers,
         private val eventBus: EventBus
 ) : GetHomeServerCapabilitiesTask {
 
     override suspend fun execute(params: Unit) {
         var doRequest = false
-        monarchy.awaitTransaction { realm ->
+        monarchy.awaitTransaction(coroutineDispatchers) { realm ->
             val homeServerCapabilitiesEntity = HomeServerCapabilitiesEntity.getOrCreate(realm)
 
             doRequest = homeServerCapabilitiesEntity.lastUpdatedTimestamp + MIN_DELAY_BETWEEN_TWO_REQUEST_MILLIS < Date().time
@@ -63,7 +65,7 @@ internal class DefaultGetHomeServerCapabilitiesTask @Inject constructor(
     }
 
     private suspend fun insertInDb(getCapabilitiesResult: GetCapabilitiesResult?, getUploadCapabilitiesResult: GetUploadCapabilitiesResult) {
-        monarchy.awaitTransaction { realm ->
+        monarchy.awaitTransaction(coroutineDispatchers) { realm ->
             val homeServerCapabilitiesEntity = HomeServerCapabilitiesEntity.getOrCreate(realm)
 
             homeServerCapabilitiesEntity.canChangePassword = getCapabilitiesResult.canChangePassword()

@@ -48,6 +48,7 @@ import im.vector.matrix.android.internal.database.query.create
 import im.vector.matrix.android.internal.database.query.getOrCreate
 import im.vector.matrix.android.internal.database.query.where
 import im.vector.matrix.android.internal.task.Task
+import im.vector.matrix.android.internal.util.MatrixCoroutineDispatchers
 import im.vector.matrix.android.internal.util.awaitTransaction
 import io.realm.Realm
 import timber.log.Timber
@@ -93,6 +94,7 @@ private fun VerificationState?.toState(newState: VerificationState): Verificatio
  */
 internal class DefaultEventRelationsAggregationTask @Inject constructor(
         private val monarchy: Monarchy,
+        private val coroutineDispatchers: MatrixCoroutineDispatchers,
         private val cryptoService: CryptoService) : EventRelationsAggregationTask {
 
     // OPT OUT serer aggregation until API mature enough
@@ -101,7 +103,7 @@ internal class DefaultEventRelationsAggregationTask @Inject constructor(
     override suspend fun execute(params: EventRelationsAggregationTask.Params) {
         val events = params.events
         val userId = params.userId
-        monarchy.awaitTransaction { realm ->
+        monarchy.awaitTransaction(coroutineDispatchers) { realm ->
             Timber.v(">>> DefaultEventRelationsAggregationTask[${params.hashCode()}] called with ${events.size} events")
             update(realm, events, userId)
             Timber.v("<<< DefaultEventRelationsAggregationTask[${params.hashCode()}] finished")

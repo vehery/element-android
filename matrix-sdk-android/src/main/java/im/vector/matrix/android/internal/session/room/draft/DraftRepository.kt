@@ -26,22 +26,24 @@ import im.vector.matrix.android.internal.database.model.DraftEntity
 import im.vector.matrix.android.internal.database.model.RoomSummaryEntity
 import im.vector.matrix.android.internal.database.model.UserDraftsEntity
 import im.vector.matrix.android.internal.database.query.where
+import im.vector.matrix.android.internal.util.MatrixCoroutineDispatchers
 import im.vector.matrix.android.internal.util.awaitTransaction
 import io.realm.Realm
 import io.realm.kotlin.createObject
 import timber.log.Timber
 import javax.inject.Inject
 
-class DraftRepository @Inject constructor(private val monarchy: Monarchy) {
+internal class DraftRepository @Inject constructor(private val monarchy: Monarchy,
+                                                   private val coroutineDispatchers: MatrixCoroutineDispatchers) {
 
     suspend fun saveDraft(roomId: String, userDraft: UserDraft) {
-        monarchy.awaitTransaction {
+        monarchy.awaitTransaction(coroutineDispatchers) {
             saveDraft(it, userDraft, roomId)
         }
     }
 
     suspend fun deleteDraft(roomId: String) {
-        monarchy.awaitTransaction {
+        monarchy.awaitTransaction(coroutineDispatchers) {
             deleteDraft(it, roomId)
         }
     }
