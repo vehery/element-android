@@ -45,7 +45,7 @@ import javax.inject.Inject
  */
 class MessageInformationDataFactory @Inject constructor(private val session: Session,
                                                         private val dateFormatter: VectorDateFormatter,
-                                                        private val colorProvider: ColorProvider) {
+                                                        private val userColorProvider: UserColorProvider) {
 
     fun create(event: TimelineEvent, nextEvent: TimelineEvent?): MessageInformationData {
         // Non nullability has been tested before
@@ -69,7 +69,7 @@ class MessageInformationDataFactory @Inject constructor(private val session: Ses
         val avatarUrl = event.senderAvatar
         val memberName = event.getDisambiguatedDisplayName()
         val formattedMemberName = span(memberName) {
-            textColor = colorProvider.getColor(getColorFromUserId(event.root.senderId))
+            textColor = userColorProvider.getColor(event.root.senderId)
         }
 
         return MessageInformationData(

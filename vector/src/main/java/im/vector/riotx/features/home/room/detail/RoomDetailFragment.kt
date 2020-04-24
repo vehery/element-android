@@ -114,7 +114,6 @@ import im.vector.riotx.core.utils.checkPermissions
 import im.vector.riotx.core.utils.colorizeMatchingText
 import im.vector.riotx.core.utils.copyToClipboard
 import im.vector.riotx.core.utils.createUIHandler
-import im.vector.riotx.core.utils.getColorFromUserId
 import im.vector.riotx.core.utils.isValidUrl
 import im.vector.riotx.core.utils.jsonViewerStyler
 import im.vector.riotx.core.utils.openUrlInExternalBrowser
@@ -139,6 +138,7 @@ import im.vector.riotx.features.home.room.detail.timeline.action.EventSharedActi
 import im.vector.riotx.features.home.room.detail.timeline.action.MessageActionsBottomSheet
 import im.vector.riotx.features.home.room.detail.timeline.action.MessageSharedActionViewModel
 import im.vector.riotx.features.home.room.detail.timeline.edithistory.ViewEditHistoryBottomSheet
+import im.vector.riotx.features.home.room.detail.timeline.helper.UserColorProvider
 import im.vector.riotx.features.home.room.detail.timeline.item.AbsMessageItem
 import im.vector.riotx.features.home.room.detail.timeline.item.MessageFileItem
 import im.vector.riotx.features.home.room.detail.timeline.item.MessageImageVideoItem
@@ -193,7 +193,8 @@ class RoomDetailFragment @Inject constructor(
         val roomDetailViewModelFactory: RoomDetailViewModel.Factory,
         private val eventHtmlRenderer: EventHtmlRenderer,
         private val vectorPreferences: VectorPreferences,
-        private val colorProvider: ColorProvider) :
+        private val colorProvider: ColorProvider,
+        private val userColorProvider: UserColorProvider) :
         VectorBaseFragment(),
         TimelineEventController.Callback,
         VectorInviteView.Callback,
@@ -464,7 +465,7 @@ class RoomDetailFragment @Inject constructor(
         // switch to expanded bar
         composerLayout.composerRelatedMessageTitle.apply {
             text = event.getDisambiguatedDisplayName()
-            setTextColor(ContextCompat.getColor(requireContext(), getColorFromUserId(event.root.senderId)))
+            setTextColor(userColorProvider.getColor(event.root.senderId))
         }
 
         val messageContent: MessageContent? = event.getLastMessageContent()

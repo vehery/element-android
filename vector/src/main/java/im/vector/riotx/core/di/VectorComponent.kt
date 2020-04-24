@@ -37,6 +37,7 @@ import im.vector.riotx.features.crypto.verification.IncomingVerificationRequestH
 import im.vector.riotx.features.grouplist.SelectedGroupDataSource
 import im.vector.riotx.features.home.AvatarRenderer
 import im.vector.riotx.features.home.HomeRoomListDataSource
+import im.vector.riotx.features.home.room.detail.timeline.helper.UserColorProvider
 import im.vector.riotx.features.html.EventHtmlRenderer
 import im.vector.riotx.features.html.VectorHtmlCompressor
 import im.vector.riotx.features.login.ReAuthHelper
@@ -65,6 +66,8 @@ interface VectorComponent {
     fun inject(vectorApplication: VectorApplication)
 
     fun matrix(): Matrix
+
+    fun userColorProvider(): UserColorProvider
 
     fun sessionListener(): SessionListener
 

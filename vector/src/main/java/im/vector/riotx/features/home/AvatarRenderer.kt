@@ -32,14 +32,15 @@ import im.vector.riotx.core.di.ActiveSessionHolder
 import im.vector.riotx.core.glide.GlideApp
 import im.vector.riotx.core.glide.GlideRequest
 import im.vector.riotx.core.glide.GlideRequests
-import im.vector.riotx.core.utils.getColorFromUserId
+import im.vector.riotx.features.home.room.detail.timeline.helper.UserColorProvider
 import javax.inject.Inject
 
 /**
  * This helper centralise ways to retrieve avatar into ImageView or even generic Target<Drawable>
  */
 
-class AvatarRenderer @Inject constructor(private val activeSessionHolder: ActiveSessionHolder) {
+class AvatarRenderer @Inject constructor(private val activeSessionHolder: ActiveSessionHolder,
+                                         private val userColorProvider: UserColorProvider) {
 
     companion object {
         private const val THUMBNAIL_SIZE = 250
@@ -83,7 +84,7 @@ class AvatarRenderer @Inject constructor(private val activeSessionHolder: Active
     @AnyThread
     fun getPlaceholderDrawable(context: Context, matrixItem: MatrixItem): Drawable {
         val avatarColor = when (matrixItem) {
-            is MatrixItem.UserItem -> ContextCompat.getColor(context, getColorFromUserId(matrixItem.id))
+            is MatrixItem.UserItem -> userColorProvider.getColor(matrixItem.id)
             else                   -> ContextCompat.getColor(context, getColorFromRoomId(matrixItem.id))
         }
         return TextDrawable.builder()
