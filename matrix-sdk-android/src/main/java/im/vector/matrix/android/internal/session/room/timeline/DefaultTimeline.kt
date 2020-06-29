@@ -50,6 +50,7 @@ import io.realm.OrderedCollectionChangeSet
 import io.realm.OrderedRealmCollectionChangeListener
 import io.realm.Realm
 import io.realm.RealmConfiguration
+import io.realm.RealmList
 import io.realm.RealmQuery
 import io.realm.RealmResults
 import io.realm.Sort
@@ -96,11 +97,13 @@ internal class DefaultTimeline(
     private val cancelableBag = CancelableBag()
     private val debouncer = Debouncer(mainHandler)
 
+    private lateinit var sendingTimelineEvents: RealmList<TimelineEventEntity>
     private lateinit var nonFilteredEvents: RealmResults<TimelineEventEntity>
     private lateinit var filteredEvents: RealmResults<TimelineEventEntity>
     private lateinit var eventRelations: RealmResults<EventAnnotationsSummaryEntity>
 
     private var roomEntity: RoomEntity? = null
+    private var liveChunk: ChunkEntity? = null
 
     private var prevDisplayIndex: Int? = null
     private var nextDisplayIndex: Int? = null
@@ -172,29 +175,39 @@ internal class DefaultTimeline(
                 eventDecryptor.start()
                 val realm = Realm.getInstance(realmConfiguration)
                 backgroundRealm.set(realm)
+                val roomEntity = RoomEntity.where(realm, roomId = roomId).findFirst()
+                        ?: throw IllegalStateException("You can't open a timeline without a Room")
 
-                roomEntity = RoomEntity.where(realm, roomId = roomId).findFirst()
-                roomEntity?.sendingTimelineEvents?.addChangeListener { events ->
+                sendingTimelineEvents = roomEntity.sendingTimelineEvents
+                sendingTimelineEvents.addChangeListener { events ->
                     // Remove in memory as soon as they are known by database
                     events.forEach { te ->
                         inMemorySendingEvents.removeAll { te.eventId == it.eventId }
                     }
                     postSnapshot()
                 }
+                val chunkResult = if (initialEventId == null) {
+                    roomEntity.chunks.where().equalTo(ChunkEntityFields.IS_LAST_FORWARD, true).findAll()
+                } else {
+                    roomEntity.chunks.where().`in`(ChunkEntityFields.TIMELINE_EVENTS.EVENT_ID, arrayOf(initialEventId)).findAll()
+                }
+                val chunk = chunkResult?.first(null)
+                if (chunk == null) {
+                    // SHOULD FETCH
+                }else {
+                    nonFilteredEvents = chunk.timelineEvents.sort(TimelineEventEntityFields.DISPLAY_INDEX, Sort.DESCENDING)
+                    filteredEvents = nonFilteredEvents.where()
+                            .filterEventsWithSettings()
+                            .findAll()
+                    handleInitialLoad()
+                    nonFilteredEvents.addChangeListener(eventsChangeListener)
+                    eventRelations = EventAnnotationsSummaryEntity.whereInRoom(realm, roomId)
+                            .findAllAsync()
+                            .also { it.addChangeListener(relationsListener) }
 
-                nonFilteredEvents = buildEventQuery(realm).sort(TimelineEventEntityFields.DISPLAY_INDEX, Sort.DESCENDING).findAll()
-                filteredEvents = nonFilteredEvents.where()
-                        .filterEventsWithSettings()
-                        .findAll()
-                handleInitialLoad()
-                nonFilteredEvents.addChangeListener(eventsChangeListener)
-
-                eventRelations = EventAnnotationsSummaryEntity.whereInRoom(realm, roomId)
-                        .findAllAsync()
-                        .also { it.addChangeListener(relationsListener) }
-
-                if (settings.shouldHandleHiddenReadReceipts()) {
-                    hiddenReadReceipts.start(realm, filteredEvents, nonFilteredEvents, this)
+                    if (settings.shouldHandleHiddenReadReceipts()) {
+                        hiddenReadReceipts.start(realm, filteredEvents, nonFilteredEvents, this)
+                    }
                 }
                 isReady.set(true)
             }
@@ -213,7 +226,9 @@ internal class DefaultTimeline(
             cancelableBag.cancel()
             BACKGROUND_HANDLER.removeCallbacksAndMessages(null)
             BACKGROUND_HANDLER.post {
-                roomEntity?.sendingTimelineEvents?.removeAllChangeListeners()
+                if (this::sendingTimelineEvents.isInitialized) {
+                    sendingTimelineEvents.removeAllChangeListeners()
+                }
                 if (this::eventRelations.isInitialized) {
                     eventRelations.removeAllChangeListeners()
                 }
