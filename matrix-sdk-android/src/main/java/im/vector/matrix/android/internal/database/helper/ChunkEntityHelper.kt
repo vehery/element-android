@@ -17,6 +17,7 @@
 package im.vector.matrix.android.internal.database.helper
 
 import im.vector.matrix.android.api.session.room.model.RoomMemberContent
+import im.vector.matrix.android.api.session.room.send.SendState
 import im.vector.matrix.android.internal.database.model.ChunkEntity
 import im.vector.matrix.android.internal.database.model.CurrentStateEventEntityFields
 import im.vector.matrix.android.internal.database.model.EventAnnotationsSummaryEntity
@@ -28,11 +29,13 @@ import im.vector.matrix.android.internal.database.model.RoomMemberSummaryEntity
 import im.vector.matrix.android.internal.database.model.RoomMemberSummaryEntityFields
 import im.vector.matrix.android.internal.database.model.TimelineEventEntity
 import im.vector.matrix.android.internal.database.model.TimelineEventEntityFields
+import im.vector.matrix.android.internal.database.query.filterSendStates
 import im.vector.matrix.android.internal.database.query.find
 import im.vector.matrix.android.internal.database.query.getOrCreate
 import im.vector.matrix.android.internal.database.query.where
 import im.vector.matrix.android.internal.extensions.assertIsManaged
 import im.vector.matrix.android.internal.session.room.timeline.PaginationDirection
+import io.realm.OrderedRealmCollection
 import io.realm.Realm
 import io.realm.Sort
 import io.realm.kotlin.createObject
@@ -47,7 +50,7 @@ internal fun ChunkEntity.deleteOnCascade() {
 internal fun ChunkEntity.merge(roomId: String, chunkToMerge: ChunkEntity, direction: PaginationDirection) {
     assertIsManaged()
     val localRealm = this.realm
-    val eventsToMerge: List<TimelineEventEntity>
+    val eventsToMerge: OrderedRealmCollection<TimelineEventEntity>
     if (direction == PaginationDirection.FORWARDS) {
         this.nextToken = chunkToMerge.nextToken
         this.isLastForward = chunkToMerge.isLastForward

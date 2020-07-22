@@ -128,6 +128,7 @@ internal class DefaultSendService @AssistedInject constructor(
 
     override fun resendTextMessage(localEcho: TimelineEvent): Cancelable? {
         if (localEcho.root.isTextMessage() && localEcho.root.sendState.hasFailed()) {
+            localEchoRepository.updateSendState(localEcho.eventId, SendState.UNSENT)
             return sendEvent(localEcho.root)
         }
         return null
@@ -171,6 +172,7 @@ internal class DefaultSendService @AssistedInject constructor(
 
     override fun deleteFailedEcho(localEcho: TimelineEvent) {
         taskExecutor.executorScope.launch {
+
             localEchoRepository.deleteFailedEcho(roomId, localEcho)
         }
     }

@@ -23,6 +23,7 @@ import io.realm.annotations.PrimaryKey
 
 internal open class RoomEntity(@PrimaryKey var roomId: String = "",
                                var chunks: RealmList<ChunkEntity> = RealmList(),
+                               //TODO Remove this after some time, to avoid forcing again too many initial syncs right now
                                var sendingTimelineEvents: RealmList<TimelineEventEntity> = RealmList(),
                                var areAllMembersLoaded: Boolean = false
 ) : RealmObject() {

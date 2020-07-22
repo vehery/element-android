@@ -17,28 +17,37 @@
 package im.vector.matrix.android.internal.session.room.send
 
 import com.zhuinden.monarchy.Monarchy
+import im.vector.matrix.android.api.session.events.model.Content
 import im.vector.matrix.android.api.session.events.model.Event
 import im.vector.matrix.android.api.session.events.model.EventType
 import im.vector.matrix.android.api.session.events.model.toModel
+import im.vector.matrix.android.api.session.room.model.RoomMemberContent
 import im.vector.matrix.android.api.session.room.model.message.MessageContent
 import im.vector.matrix.android.api.session.room.model.message.MessageType
 import im.vector.matrix.android.api.session.room.send.SendState
 import im.vector.matrix.android.api.session.room.timeline.TimelineEvent
+import im.vector.matrix.android.internal.crypto.MXEventDecryptionResult
+import im.vector.matrix.android.internal.database.helper.addTimelineEvent
 import im.vector.matrix.android.internal.database.helper.nextId
+import im.vector.matrix.android.internal.database.mapper.ContentMapper
 import im.vector.matrix.android.internal.database.mapper.TimelineEventMapper
 import im.vector.matrix.android.internal.database.mapper.asDomain
 import im.vector.matrix.android.internal.database.mapper.toEntity
+import im.vector.matrix.android.internal.database.model.ChunkEntity
+import im.vector.matrix.android.internal.database.model.CurrentStateEventEntity
 import im.vector.matrix.android.internal.database.model.EventEntity
-import im.vector.matrix.android.internal.database.model.EventInsertEntity
 import im.vector.matrix.android.internal.database.model.EventInsertType
-import im.vector.matrix.android.internal.database.model.RoomEntity
 import im.vector.matrix.android.internal.database.model.TimelineEventEntity
+import im.vector.matrix.android.internal.database.query.copyToRealmOrIgnore
 import im.vector.matrix.android.internal.database.query.findAllInRoomWithSendStates
+import im.vector.matrix.android.internal.database.query.findLastForwardChunkOfRoom
+import im.vector.matrix.android.internal.database.query.getOrNull
 import im.vector.matrix.android.internal.database.query.where
 import im.vector.matrix.android.internal.di.SessionDatabase
-import im.vector.matrix.android.internal.session.room.summary.RoomSummaryUpdater
 import im.vector.matrix.android.internal.session.room.membership.RoomMemberHelper
+import im.vector.matrix.android.internal.session.room.summary.RoomSummaryUpdater
 import im.vector.matrix.android.internal.session.room.timeline.DefaultTimeline
+import im.vector.matrix.android.internal.session.room.timeline.PaginationDirection
 import im.vector.matrix.android.internal.util.awaitTransaction
 import io.realm.Realm
 import org.greenrobot.eventbus.EventBus
@@ -73,17 +82,47 @@ internal class LocalEchoRepository @Inject constructor(@SessionDatabase private 
         val timelineEvent = timelineEventMapper.map(timelineEventEntity)
         eventBus.post(DefaultTimeline.OnLocalEchoCreated(roomId = roomId, timelineEvent = timelineEvent))
         monarchy.writeAsync { realm ->
-            val eventInsertEntity = EventInsertEntity(event.eventId, event.type).apply {
-                this.insertType = EventInsertType.LOCAL_ECHO
-            }
-            realm.insert(eventInsertEntity)
+            val liveChunk = ChunkEntity.findLastForwardChunkOfRoom(realm, roomId) ?: return@writeAsync
+            val eventEntity = timelineEventEntity.root!!.copyToRealmOrIgnore(realm, EventInsertType.LOCAL_ECHO)
+            val rootStateEvent = CurrentStateEventEntity.getOrNull(realm, roomId, senderId, EventType.STATE_ROOM_MEMBER)?.root
+            val myRoomMember = rootStateEvent?.asDomain()?.content?.toModel<RoomMemberContent>()
+            liveChunk.addTimelineEvent(roomId, eventEntity, PaginationDirection.FORWARDS, mapOf(senderId to myRoomMember))
+            /*
             val roomEntity = RoomEntity.where(realm, roomId = roomId).findFirst() ?: return@writeAsync
             roomEntity.sendingTimelineEvents.add(0, timelineEventEntity)
+
+             */
             roomSummaryUpdater.update(realm, roomId)
         }
     }
 
+    fun updateSendState(eventId: String, sendState: SendState) {
+        Timber.v("Update local state of $eventId to ${sendState.name}")
+        monarchy.writeAsync { realm ->
+            val sendingEventEntity = EventEntity.where(realm, eventId).findFirst()
+            if (sendingEventEntity != null) {
+                if (sendState == SendState.SENT && sendingEventEntity.sendState == SendState.SYNCED) {
+                    // If already synced, do not put as sent
+                } else {
+                    sendingEventEntity.sendState = sendState
+                }
+            }
+        }
+    }
+
+    fun updateEncryptedEcho(eventId: String, encryptedContent: Content, mxEventDecryptionResult: MXEventDecryptionResult) {
+        monarchy.writeAsync { realm ->
+            val sendingEventEntity = EventEntity.where(realm, eventId).findFirst()
+            if (sendingEventEntity != null) {
+                sendingEventEntity.type = EventType.ENCRYPTED
+                sendingEventEntity.content = ContentMapper.map(encryptedContent)
+                sendingEventEntity.setDecryptionResult(mxEventDecryptionResult)
+            }
+        }
+    }
+
     suspend fun deleteFailedEcho(roomId: String, localEcho: TimelineEvent) {
+        eventBus.post(DefaultTimeline.OnLocalEchoRemoved(roomId = roomId, timelineEvent = localEcho))
         monarchy.awaitTransaction { realm ->
             TimelineEventEntity.where(realm, roomId = roomId, eventId = localEcho.root.eventId ?: "").findFirst()?.deleteFromRealm()
             EventEntity.where(realm, eventId = localEcho.root.eventId ?: "").findFirst()?.deleteFromRealm()
@@ -92,11 +131,11 @@ internal class LocalEchoRepository @Inject constructor(@SessionDatabase private 
 
     suspend fun clearSendingQueue(roomId: String) {
         monarchy.awaitTransaction { realm ->
-            RoomEntity.where(realm, roomId).findFirst()?.let { room ->
-                room.sendingTimelineEvents.forEach {
-                    it.root?.sendState = SendState.UNDELIVERED
-                }
-            }
+            TimelineEventEntity
+                    .findAllInRoomWithSendStates(realm, roomId, SendState.IS_SENDING_STATES)
+                    .forEach {
+                        it.root?.sendState = SendState.UNSENT
+                    }
         }
     }
 

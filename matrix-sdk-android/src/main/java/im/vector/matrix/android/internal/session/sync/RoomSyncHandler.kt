@@ -40,6 +40,7 @@ import im.vector.matrix.android.internal.database.model.RoomEntity
 import im.vector.matrix.android.internal.database.model.RoomMemberSummaryEntity
 import im.vector.matrix.android.internal.database.query.copyToRealmOrIgnore
 import im.vector.matrix.android.internal.database.query.find
+import im.vector.matrix.android.internal.database.query.findIncludingEvent
 import im.vector.matrix.android.internal.database.query.findLastForwardChunkOfRoom
 import im.vector.matrix.android.internal.database.query.getOrCreate
 import im.vector.matrix.android.internal.database.query.getOrNull
@@ -286,6 +287,7 @@ internal class RoomSyncHandler @Inject constructor(private val readReceiptHandle
         val chunkEntity = if (!isLimited && lastChunk != null) {
             lastChunk
         } else {
+            eventBus.post(DefaultTimeline.OnChunkGap(roomId = roomId))
             realm.createObject<ChunkEntity>().apply { this.prevToken = prevToken }
         }
         // Only one chunk has isLastForward set to true
@@ -327,13 +329,13 @@ internal class RoomSyncHandler @Inject constructor(private val readReceiptHandle
             chunkEntity.addTimelineEvent(roomId, eventEntity, PaginationDirection.FORWARDS, roomMemberContentsByUser)
             // Give info to crypto module
             cryptoService.onLiveEvent(roomEntity.roomId, event)
-
             // Try to remove local echo
             event.unsignedData?.transactionId?.also {
-                val sendingEventEntity = roomEntity.sendingTimelineEvents.find(it)
+                val sendingChunkEntity = ChunkEntity.findIncludingEvent(realm, eventId = it) ?: return@also
+                val sendingEventEntity = sendingChunkEntity.timelineEvents.find(it)
                 if (sendingEventEntity != null) {
                     Timber.v("Remove local echo for tx:$it")
-                    roomEntity.sendingTimelineEvents.remove(sendingEventEntity)
+                    sendingChunkEntity.timelineEvents.remove(sendingEventEntity)
                     if (event.isEncrypted() && event.content?.get("algorithm") as? String == MXCRYPTO_ALGORITHM_MEGOLM) {
                         // updated with echo decryption, to avoid seeing it decrypt again
                         val adapter = MoshiProvider.providesMoshi().adapter<OlmDecryptionResult>(OlmDecryptionResult::class.java)

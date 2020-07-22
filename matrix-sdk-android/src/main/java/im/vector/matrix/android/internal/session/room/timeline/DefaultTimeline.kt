@@ -38,6 +38,7 @@ import im.vector.matrix.android.internal.database.query.TimelineEventFilter
 import im.vector.matrix.android.internal.database.query.findAllInRoomWithSendStates
 import im.vector.matrix.android.internal.database.query.where
 import im.vector.matrix.android.internal.database.query.whereRoomId
+import im.vector.matrix.android.internal.extensions.removeFirst
 import im.vector.matrix.android.internal.task.TaskExecutor
 import im.vector.matrix.android.internal.task.configureWith
 import im.vector.matrix.android.internal.util.Debouncer
@@ -78,6 +79,8 @@ internal class DefaultTimeline(
         private val eventDecryptor: TimelineEventDecryptor
 ) : Timeline, TimelineHiddenReadReceipts.Delegate {
 
+    data class OnChunkGap(val roomId: String)
+    data class OnLocalEchoRemoved(val roomId: String, val timelineEvent: TimelineEvent)
     data class OnNewTimelineEvents(val roomId: String, val eventIds: List<String>)
     data class OnLocalEchoCreated(val roomId: String, val timelineEvent: TimelineEvent)
 
@@ -95,7 +98,6 @@ internal class DefaultTimeline(
 
     private lateinit var nonFilteredEvents: RealmResults<TimelineEventEntity>
     private lateinit var filteredEvents: RealmResults<TimelineEventEntity>
-    private lateinit var sendingEvents: RealmResults<TimelineEventEntity>
 
     private var prevDisplayIndex: Int? = null
     private var nextDisplayIndex: Int? = null
@@ -135,7 +137,7 @@ internal class DefaultTimeline(
 
     override fun pendingEventCount(): Int {
         return Realm.getInstance(realmConfiguration).use {
-            RoomEntity.where(it, roomId).findFirst()?.sendingTimelineEvents?.count() ?: 0
+            TimelineEventEntity.findAllInRoomWithSendStates(it, roomId, SendState.IS_SENDING_STATES).count()
         }
     }
 
@@ -154,17 +156,6 @@ internal class DefaultTimeline(
                 val realm = Realm.getInstance(realmConfiguration)
                 backgroundRealm.set(realm)
 
-                val roomEntity = RoomEntity.where(realm, roomId = roomId).findFirst()
-                        ?: throw IllegalStateException("Can't open a timeline without a room")
-
-                sendingEvents = roomEntity.sendingTimelineEvents.where().filterEventsWithSettings().findAll()
-                sendingEvents.addChangeListener { events ->
-                    // Remove in memory as soon as they are known by database
-                    events.forEach { te ->
-                        inMemorySendingEvents.removeAll { te.eventId == it.eventId }
-                    }
-                    postSnapshot()
-                }
                 nonFilteredEvents = buildEventQuery(realm).sort(TimelineEventEntityFields.DISPLAY_INDEX, Sort.DESCENDING).findAll()
                 filteredEvents = nonFilteredEvents.where()
                         .filterEventsWithSettings()
@@ -191,9 +182,6 @@ internal class DefaultTimeline(
             cancelableBag.cancel()
             BACKGROUND_HANDLER.removeCallbacksAndMessages(null)
             BACKGROUND_HANDLER.post {
-                if (this::sendingEvents.isInitialized) {
-                    sendingEvents.removeAllChangeListeners()
-                }
                 if (this::nonFilteredEvents.isInitialized) {
                     nonFilteredEvents.removeAllChangeListeners()
                 }
@@ -324,6 +312,33 @@ internal class DefaultTimeline(
         }
     }
 
+    @Subscribe(threadMode = ThreadMode.POSTING)
+    fun onChunkGap(onChunkGap: OnChunkGap) {
+        BACKGROUND_HANDLER.post {
+            if (isLive && onChunkGap.roomId == roomId) {
+                clearAllValues()
+                postSnapshot()
+            }
+        }
+    }
+
+    @Subscribe(threadMode = ThreadMode.POSTING)
+    fun onLocalEchoRemoved(onLocalEchoRemoved: OnLocalEchoRemoved) {
+        BACKGROUND_HANDLER.post {
+            if (isLive && onLocalEchoRemoved.roomId == roomId) {
+                inMemorySendingEvents.removeFirst {
+                    it.eventId == onLocalEchoRemoved.timelineEvent.eventId
+                }
+                builtEventsIdMap.remove(onLocalEchoRemoved.timelineEvent.eventId)?.also { buildIndex ->
+                    // Need to shift
+                    builtEventsIdMap.entries.filter { it.value >= buildIndex }.forEach { it.setValue(it.value - 1) }
+                    builtEvents.removeAt(buildIndex)
+                }
+                postSnapshot()
+            }
+        }
+    }
+
 // Private methods *****************************************************************************
 
     private fun rebuildEvent(eventId: String, builder: (TimelineEvent) -> TimelineEvent): Boolean {
@@ -342,21 +357,18 @@ internal class DefaultTimeline(
 
     private fun updateLoadingStates(results: RealmResults<TimelineEventEntity>) {
         val lastCacheEvent = results.lastOrNull()
-        val lastBuiltEvent = builtEvents.lastOrNull()
         val firstCacheEvent = results.firstOrNull()
-        val firstBuiltEvent = builtEvents.firstOrNull()
         val chunkEntity = getLiveChunk()
 
         updateState(Timeline.Direction.FORWARDS) {
             it.copy(
-                    hasMoreInCache = firstBuiltEvent != null && firstBuiltEvent.displayIndex < firstCacheEvent?.displayIndex ?: Int.MIN_VALUE,
+                    hasMoreInCache = !builtEventsIdMap.containsKey(firstCacheEvent?.eventId),
                     hasReachedEnd = chunkEntity?.isLastForward ?: false
             )
         }
-
         updateState(Timeline.Direction.BACKWARDS) {
             it.copy(
-                    hasMoreInCache = lastBuiltEvent == null || lastBuiltEvent.displayIndex > lastCacheEvent?.displayIndex ?: Int.MAX_VALUE,
+                    hasMoreInCache = !builtEventsIdMap.containsKey(lastCacheEvent?.eventId),
                     hasReachedEnd = chunkEntity?.isLastBackward ?: false || lastCacheEvent?.root?.type == EventType.STATE_ROOM_CREATE
             )
         }
@@ -387,20 +399,15 @@ internal class DefaultTimeline(
     }
 
     private fun createSnapshot(): List<TimelineEvent> {
-        return buildSendingEvents() + builtEvents.toList()
+        return buildInMemoryLocalEchoes() + builtEvents.toList()
     }
 
-    private fun buildSendingEvents(): List<TimelineEvent> {
-        val builtSendingEvents = ArrayList<TimelineEvent>()
-        if (hasReachedEnd(Timeline.Direction.FORWARDS) && !hasMoreInCache(Timeline.Direction.FORWARDS)) {
-            builtSendingEvents.addAll(inMemorySendingEvents.filterEventsWithSettings())
-            sendingEvents.forEach { timelineEventEntity ->
-                if (builtSendingEvents.find { it.eventId == timelineEventEntity.eventId } == null) {
-                    builtSendingEvents.add(timelineEventMapper.map(timelineEventEntity))
-                }
-            }
+    private fun buildInMemoryLocalEchoes(): List<TimelineEvent> {
+        return if (hasReachedEnd(Timeline.Direction.FORWARDS) && !hasMoreInCache(Timeline.Direction.FORWARDS)) {
+            inMemorySendingEvents.filterEventsWithSettings()
+        } else {
+            emptyList()
         }
-        return builtSendingEvents
     }
 
     private fun canPaginate(direction: Timeline.Direction): Boolean {
@@ -460,10 +467,6 @@ internal class DefaultTimeline(
      * This has to be called on TimelineThread as it accesses realm live results
      */
     private fun handleUpdates(results: RealmResults<TimelineEventEntity>, changeSet: OrderedCollectionChangeSet) {
-        // If changeSet has deletion we are having a gap, so we clear everything
-        if (changeSet.deletionRanges.isNotEmpty()) {
-            clearAllValues()
-        }
         var postSnapshot = false
         changeSet.insertionRanges.forEach { range ->
             val (startDisplayIndex, direction) = if (range.startIndex == 0) {
@@ -607,21 +610,31 @@ internal class DefaultTimeline(
 
             val timelineEvent = buildTimelineEvent(eventEntity)
             val transactionId = timelineEvent.root.unsignedData?.transactionId
-            val sendingEvent = inMemorySendingEvents.find {
+            // Remove from inMemory local echo if any...
+            inMemorySendingEvents.removeFirst {
                 it.eventId == transactionId
             }
-            inMemorySendingEvents.remove(sendingEvent)
+            // ...and replace the local echo built item at his position, to avoid weird behavior.
+            // Next time you will enter the timeline it will be ordered by sync index
+            if (builtEventsIdMap.containsKey(transactionId)) {
+                builtEventsIdMap[transactionId]?.also { builtIndex ->
+                    builtEvents[builtIndex] = timelineEvent
+                    builtEventsIdMap[eventEntity.eventId] = builtIndex
+                    builtEventsIdMap.remove(transactionId)
+                }
+            } else {
+                // Otherwise, add to built items
+                if (timelineEvent.isEncrypted()
+                        && timelineEvent.root.mxDecryptionResult == null) {
+                    timelineEvent.root.eventId?.also { eventDecryptor.requestDecryption(TimelineEventDecryptor.DecryptionRequest(it, timelineID)) }
+                }
 
-            if (timelineEvent.isEncrypted()
-                    && timelineEvent.root.mxDecryptionResult == null) {
-                timelineEvent.root.eventId?.also { eventDecryptor.requestDecryption(TimelineEventDecryptor.DecryptionRequest(it, timelineID)) }
+                val position = if (direction == Timeline.Direction.FORWARDS) 0 else builtEvents.size
+                builtEvents.add(position, timelineEvent)
+                // Need to shift :/
+                builtEventsIdMap.entries.filter { it.value >= position }.forEach { it.setValue(it.value + 1) }
+                builtEventsIdMap[eventEntity.eventId] = position
             }
-
-            val position = if (direction == Timeline.Direction.FORWARDS) 0 else builtEvents.size
-            builtEvents.add(position, timelineEvent)
-            // Need to shift :/
-            builtEventsIdMap.entries.filter { it.value >= position }.forEach { it.setValue(it.value + 1) }
-            builtEventsIdMap[eventEntity.eventId] = position
         }
         val time = System.currentTimeMillis() - start
         Timber.v("Built ${offsetResults.size} items from db in $time ms")

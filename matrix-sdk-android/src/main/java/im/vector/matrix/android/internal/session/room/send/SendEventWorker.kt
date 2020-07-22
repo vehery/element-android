@@ -20,6 +20,8 @@ import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.squareup.moshi.JsonClass
+import im.vector.matrix.android.api.extensions.orFalse
+import im.vector.matrix.android.api.failure.Failure
 import im.vector.matrix.android.api.failure.shouldBeRetried
 import im.vector.matrix.android.api.session.events.model.Event
 import im.vector.matrix.android.api.session.room.send.SendState
@@ -32,6 +34,8 @@ import im.vector.matrix.android.internal.worker.getSessionComponent
 import org.greenrobot.eventbus.EventBus
 import timber.log.Timber
 import javax.inject.Inject
+
+private const val MAX_NUMBER_OF_RETRY_BEFORE_FAILING = 3
 
 /**
  * Possible previous worker: [EncryptEventWorker] or first worker
@@ -63,7 +67,7 @@ internal class SendEventWorker(context: Context,
         )
     }
 
-    @Inject lateinit var localEchoUpdater: LocalEchoUpdater
+    @Inject lateinit var localEchoRepository: LocalEchoRepository
     @Inject lateinit var roomAPI: RoomAPI
     @Inject lateinit var eventBus: EventBus
 
@@ -74,16 +78,15 @@ internal class SendEventWorker(context: Context,
 
         val sessionComponent = getSessionComponent(params.sessionId) ?: return Result.success()
         sessionComponent.inject(this)
-
         if (params.eventId == null || params.roomId == null || params.type == null) {
             // compat with old params, make it fail if any
             if (params.event?.eventId != null) {
-                localEchoUpdater.updateSendState(params.event.eventId, SendState.UNDELIVERED)
+                localEchoRepository.updateSendState(params.event.eventId, SendState.UNDELIVERED)
             }
             return Result.success()
         }
         if (params.lastFailureMessage != null) {
-            localEchoUpdater.updateSendState(params.eventId, SendState.UNDELIVERED)
+            localEchoRepository.updateSendState(params.eventId, SendState.UNDELIVERED)
             // Transmit the error
             return Result.success(inputData)
                     .also { Timber.e("Work cancelled due to input error from parent") }
@@ -92,21 +95,25 @@ internal class SendEventWorker(context: Context,
             sendEvent(params.eventId, params.roomId, params.type, params.contentStr)
             Result.success()
         } catch (exception: Throwable) {
-            if (exception.shouldBeRetried()) {
-                Result.retry()
+            // It does start from 0, we want it to stop if it fails the third time
+            val currentAttemptCount = runAttemptCount + 1
+            if (currentAttemptCount >= MAX_NUMBER_OF_RETRY_BEFORE_FAILING || !exception.shouldBeRetried()) {
+                localEchoRepository.updateSendState(params.eventId, SendState.UNDELIVERED)
+                return Result.success()
             } else {
-                localEchoUpdater.updateSendState(params.eventId, SendState.UNDELIVERED)
-                // always return success, or the chain will be stuck for ever!
-                Result.success()
+                Result.retry()
             }
         }
     }
 
     private suspend fun sendEvent(eventId: String, roomId: String, type: String, contentStr: String?) {
-        localEchoUpdater.updateSendState(eventId, SendState.SENDING)
+        localEchoRepository.updateSendState(eventId, SendState.SENDING)
+        if (contentStr?.contains("fail") == true) {
+            throw Failure.NetworkConnection()
+        }
         executeRequest<SendResponse>(eventBus) {
             apiCall = roomAPI.send(eventId, roomId, type, contentStr)
         }
-        localEchoUpdater.updateSendState(eventId, SendState.SENT)
+        localEchoRepository.updateSendState(eventId, SendState.SENT)
     }
 }
