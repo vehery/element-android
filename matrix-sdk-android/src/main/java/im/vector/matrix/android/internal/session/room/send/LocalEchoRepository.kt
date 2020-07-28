@@ -48,12 +48,22 @@ import org.greenrobot.eventbus.EventBus
 import timber.log.Timber
 import javax.inject.Inject
 
-internal class LocalEchoRepository @Inject constructor(@SessionDatabase private val monarchy: Monarchy,
-                                                       private val roomSummaryUpdater: RoomSummaryUpdater,
-                                                       private val eventBus: EventBus,
-                                                       private val timelineEventMapper: TimelineEventMapper) {
+interface LocalEchoRepository {
+    fun createLocalEcho(event: Event)
+    fun updateSendState(eventId: String, sendState: SendState)
+    fun updateEncryptedEcho(eventId: String, encryptedContent: Content, mxEventDecryptionResult: MXEventDecryptionResult)
+    suspend fun deleteFailedEcho(roomId: String, localEcho: TimelineEvent)
+    suspend fun clearSendingQueue(roomId: String)
+    suspend fun updateSendState(roomId: String, eventIds: List<String>, sendState: SendState)
+    fun getAllFailedEventsToResend(roomId: String): List<Event>
+}
 
-    fun createLocalEcho(event: Event) {
+internal class RealmLocalEchoRepository @Inject constructor(@SessionDatabase private val monarchy: Monarchy,
+                                                            private val roomSummaryUpdater: RoomSummaryUpdater,
+                                                            private val eventBus: EventBus,
+                                                            private val timelineEventMapper: TimelineEventMapper): LocalEchoRepository {
+
+    override fun createLocalEcho(event: Event) {
         val roomId = event.roomId ?: throw IllegalStateException("You should have set a roomId for your event")
         val senderId = event.senderId ?: throw IllegalStateException("You should have set a senderIf for your event")
         if (event.eventId == null) {
@@ -86,7 +96,7 @@ internal class LocalEchoRepository @Inject constructor(@SessionDatabase private 
         }
     }
 
-    fun updateSendState(eventId: String, sendState: SendState) {
+    override fun updateSendState(eventId: String, sendState: SendState) {
         Timber.v("Update local state of $eventId to ${sendState.name}")
         monarchy.writeAsync { realm ->
             val sendingEventEntity = EventEntity.where(realm, eventId).findFirst()
@@ -101,7 +111,7 @@ internal class LocalEchoRepository @Inject constructor(@SessionDatabase private 
         }
     }
 
-    fun updateEncryptedEcho(eventId: String, encryptedContent: Content, mxEventDecryptionResult: MXEventDecryptionResult) {
+    override fun updateEncryptedEcho(eventId: String, encryptedContent: Content, mxEventDecryptionResult: MXEventDecryptionResult) {
         monarchy.writeAsync { realm ->
             val sendingEventEntity = EventEntity.where(realm, eventId).findFirst()
             if (sendingEventEntity != null) {
@@ -112,7 +122,7 @@ internal class LocalEchoRepository @Inject constructor(@SessionDatabase private 
         }
     }
 
-    suspend fun deleteFailedEcho(roomId: String, localEcho: TimelineEvent) {
+    override suspend fun deleteFailedEcho(roomId: String, localEcho: TimelineEvent) {
         monarchy.awaitTransaction { realm ->
             TimelineEventEntity.where(realm, roomId = roomId, eventId = localEcho.root.eventId ?: "").findFirst()?.deleteFromRealm()
             EventEntity.where(realm, eventId = localEcho.root.eventId ?: "").findFirst()?.deleteFromRealm()
@@ -120,7 +130,7 @@ internal class LocalEchoRepository @Inject constructor(@SessionDatabase private 
         }
     }
 
-    suspend fun clearSendingQueue(roomId: String) {
+    override suspend fun clearSendingQueue(roomId: String) {
         monarchy.awaitTransaction { realm ->
             TimelineEventEntity
                     .findAllInRoomWithSendStates(realm, roomId, SendState.IS_SENDING_STATES)
@@ -131,7 +141,7 @@ internal class LocalEchoRepository @Inject constructor(@SessionDatabase private 
         }
     }
 
-    suspend fun updateSendState(roomId: String, eventIds: List<String>, sendState: SendState) {
+    override suspend fun updateSendState(roomId: String, eventIds: List<String>, sendState: SendState) {
         monarchy.awaitTransaction { realm ->
             val timelineEvents = TimelineEventEntity.where(realm, roomId, eventIds).findAll()
             timelineEvents.forEach {
@@ -141,7 +151,7 @@ internal class LocalEchoRepository @Inject constructor(@SessionDatabase private 
         }
     }
 
-    fun getAllFailedEventsToResend(roomId: String): List<Event> {
+    override fun getAllFailedEventsToResend(roomId: String): List<Event> {
         return Realm.getInstance(monarchy.realmConfiguration).use { realm ->
             TimelineEventEntity
                     .findAllInRoomWithSendStates(realm, roomId, SendState.HAS_FAILED_STATES)

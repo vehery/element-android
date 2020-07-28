@@ -74,6 +74,8 @@ import im.vector.matrix.android.internal.session.integrationmanager.IntegrationM
 import im.vector.matrix.android.internal.session.room.EventRelationsAggregationProcessor
 import im.vector.matrix.android.internal.session.room.create.RoomCreateEventProcessor
 import im.vector.matrix.android.internal.session.room.prune.RedactionEventProcessor
+import im.vector.matrix.android.internal.session.room.send.LocalEchoRepository
+import im.vector.matrix.android.internal.session.room.send.RealmLocalEchoRepository
 import im.vector.matrix.android.internal.session.room.tombstone.RoomTombstoneEventProcessor
 import im.vector.matrix.android.internal.session.securestorage.DefaultSecureStorageService
 import im.vector.matrix.android.internal.session.typing.DefaultTypingUsersTracker
@@ -357,4 +359,7 @@ internal abstract class SessionModule {
 
     @Binds
     abstract fun bindTypingUsersTracker(tracker: DefaultTypingUsersTracker): TypingUsersTracker
+
+    @Binds
+    abstract fun bindLocalEchoRepository(repository: RealmLocalEchoRepository): LocalEchoRepository
 }
