@@ -27,16 +27,20 @@ import im.vector.matrix.android.internal.network.toFailure
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import okio.BufferedSink
+import okio.source
 import org.greenrobot.eventbus.EventBus
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
+import java.io.InputStream
 import javax.inject.Inject
 
 internal class FileUploader @Inject constructor(@Authenticated
@@ -65,6 +69,22 @@ internal class FileUploader @Inject constructor(@Authenticated
         return upload(uploadBody, filename, progressListener)
     }
 
+    suspend fun uploadInputStream(inputStream: InputStream,
+                                filename: String?,
+                                mimeType: String?,
+                                progressListener: ProgressRequestBody.Listener? = null): ContentUploadResponse {
+        val uploadBody =  object : RequestBody() {
+            override fun contentType(): MediaType? {
+               return mimeType?.toMediaTypeOrNull()
+            }
+
+            override fun writeTo(sink: BufferedSink) {
+               inputStream.source().use { sink.writeAll(it) }
+            }
+        }
+        return upload(uploadBody, filename, progressListener)
+    }
+
     suspend fun uploadFromUri(uri: Uri,
                               filename: String?,
                               mimeType: String?,
@@ -73,9 +93,7 @@ internal class FileUploader @Inject constructor(@Authenticated
             context.contentResolver.openInputStream(uri)
         } ?: throw FileNotFoundException()
 
-        inputStream.use {
-            return uploadByteArray(it.readBytes(), filename, mimeType, progressListener)
-        }
+        return uploadInputStream(inputStream, filename, mimeType, progressListener)
     }
 
     private suspend fun upload(uploadBody: RequestBody, filename: String?, progressListener: ProgressRequestBody.Listener?): ContentUploadResponse {
