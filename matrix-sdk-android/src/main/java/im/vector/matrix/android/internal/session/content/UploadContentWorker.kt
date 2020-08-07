@@ -37,6 +37,7 @@ import im.vector.matrix.android.internal.crypto.attachments.MXEncryptedAttachmen
 import im.vector.matrix.android.internal.crypto.model.rest.EncryptedFileInfo
 import im.vector.matrix.android.internal.network.ProgressRequestBody
 import im.vector.matrix.android.internal.session.DefaultFileService
+import im.vector.matrix.android.internal.session.room.send.CancelSendTracker
 import im.vector.matrix.android.internal.session.room.send.MultipleEventSendingDispatcherWorker
 import im.vector.matrix.android.internal.worker.SessionWorkerParams
 import im.vector.matrix.android.internal.worker.WorkerParamsFactory
@@ -74,6 +75,7 @@ internal class UploadContentWorker(val context: Context, params: WorkerParameter
     @Inject lateinit var fileUploader: FileUploader
     @Inject lateinit var contentUploadStateTracker: DefaultContentUploadStateTracker
     @Inject lateinit var fileService: DefaultFileService
+    @Inject lateinit var cancelSendTracker: CancelSendTracker
 
     override suspend fun doWork(): Result {
         val params = WorkerParamsFactory.fromData<Params>(inputData)
@@ -104,6 +106,13 @@ internal class UploadContentWorker(val context: Context, params: WorkerParameter
         val attachment = params.attachment
 
         var newImageAttributes: NewImageAttributes? = null
+
+        val allCancelled = params.events.all { cancelSendTracker.isCancelRequestedFor(it.eventId, it.roomId) }
+        if (allCancelled) {
+            // there is no point in uploading the image!
+            return Result.success(inputData)
+                    .also { Timber.e("## Send: Work cancelled by user") }
+        }
 
         try {
             val inputStream = context.contentResolver.openInputStream(attachment.queryUri)
@@ -164,7 +173,8 @@ internal class UploadContentWorker(val context: Context, params: WorkerParameter
             var uploadedFileEncryptedFileInfo: EncryptedFileInfo? = null
 
             return try {
-                var modifiedStream: InputStream? = null
+
+                var modifiedStream: InputStream
 
                 if (attachment.type == ContentAttachmentData.Type.IMAGE && params.compressBeforeSending) {
                     // Compressor library works with File instead of Uri for now. Since Scoped Storage doesn't allow us to access files directly, we should
@@ -200,22 +210,25 @@ internal class UploadContentWorker(val context: Context, params: WorkerParameter
                             fileSize
                     )
                     modifiedStream = compressedFile.inputStream()
+                } else {
+                    // Unfortunatly the original stream is not always able to provide content length
+                    // by passing by a temp copy it's working (better experience for upload progress..)
+                    modifiedStream = if (tryThis { inputStream.available()} ?: 0 <= 0) {
+                        val tmp = File.createTempFile(UUID.randomUUID().toString(), null, context.cacheDir)
+                        tmp.outputStream().use {
+                            inputStream.copyTo(it)
+                        }
+                        tmp.inputStream()
+                    } else inputStream
                 }
 
-                val streamToUpload = modifiedStream ?: inputStream
                 val contentUploadResponse = if (params.isEncrypted) {
                     Timber.v("## FileService: Encrypt file")
-//
-//                        val encryptionResult = MXEncryptedAttachments.encryptAttachment(FileInputStream(cacheFile), attachment.getSafeMimeType())
-//                        uploadedFileEncryptedFileInfo = encryptionResult.encryptedFileInfo
-//
-//                        fileUploader
-//                                .uploadByteArray(encryptionResult.encryptedByteArray, attachment.name, "application/octet-stream", progressListener)
 
                     val tmpEncrypted = File.createTempFile(UUID.randomUUID().toString(), null, context.cacheDir)
 
                     uploadedFileEncryptedFileInfo =
-                            MXEncryptedAttachments.encrypt(streamToUpload, attachment.getSafeMimeType(), tmpEncrypted) { read, total ->
+                            MXEncryptedAttachments.encrypt(modifiedStream, attachment.getSafeMimeType(), tmpEncrypted) { read, total ->
                                 notifyTracker(params) {
                                     contentUploadStateTracker.setEncrypting(it, read.toLong(), total.toLong())
                                 }
@@ -232,12 +245,12 @@ internal class UploadContentWorker(val context: Context, params: WorkerParameter
                 } else {
                     Timber.v("## FileService: Clear file")
                     fileUploader
-                            .uploadInputStream(streamToUpload, attachment.name, attachment.getSafeMimeType(), progressListener)
+                            .uploadInputStream(modifiedStream, attachment.name, attachment.getSafeMimeType(), progressListener)
                 }
 
                 // If it's a file update the file service so that it does not redownload?
-                if (params.attachment.type == ContentAttachmentData.Type.FILE) {
-                    Timber.v("## FileService: Update cache storage")
+//                if (params.attachment.type == ContentAttachmentData.Type.FILE) {
+                    Timber.v("## FileService: Update cache storage for ${contentUploadResponse.contentUri}")
                     try {
                         context.contentResolver.openInputStream(attachment.queryUri)?.let {
                             fileService.storeDataFor(contentUploadResponse.contentUri, params.attachment.getSafeMimeType(), it)
@@ -246,7 +259,7 @@ internal class UploadContentWorker(val context: Context, params: WorkerParameter
                     } catch (failure: Throwable) {
                         Timber.e(failure, "## FileService: Failed to update fileservice cache")
                     }
-                }
+//                }
 
                 handleSuccess(params,
                         contentUploadResponse.contentUri,
@@ -255,7 +268,7 @@ internal class UploadContentWorker(val context: Context, params: WorkerParameter
                         uploadedThumbnailEncryptedFileInfo,
                         newImageAttributes)
             } catch (t: Throwable) {
-                Timber.e(t, "## FileService: ERROR")
+                Timber.e(t, "## FileService: ERROR ${t.localizedMessage}")
                 handleFailure(params, t)
             }
 //            }

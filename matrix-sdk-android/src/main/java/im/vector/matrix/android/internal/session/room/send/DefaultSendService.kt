@@ -16,6 +16,7 @@
 
 package im.vector.matrix.android.internal.session.room.send
 
+import android.net.Uri
 import androidx.work.BackoffPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequest
@@ -25,9 +26,17 @@ import com.squareup.inject.assisted.AssistedInject
 import im.vector.matrix.android.api.session.content.ContentAttachmentData
 import im.vector.matrix.android.api.session.crypto.CryptoService
 import im.vector.matrix.android.api.session.events.model.Event
-import im.vector.matrix.android.api.session.events.model.isImageMessage
+import im.vector.matrix.android.api.session.events.model.isAttachmentMessage
 import im.vector.matrix.android.api.session.events.model.isTextMessage
+import im.vector.matrix.android.api.session.events.model.toModel
+import im.vector.matrix.android.api.session.room.model.message.MessageAudioContent
+import im.vector.matrix.android.api.session.room.model.message.MessageContent
+import im.vector.matrix.android.api.session.room.model.message.MessageFileContent
+import im.vector.matrix.android.api.session.room.model.message.MessageImageContent
+import im.vector.matrix.android.api.session.room.model.message.MessageVideoContent
+import im.vector.matrix.android.api.session.room.model.message.MessageWithAttachmentContent
 import im.vector.matrix.android.api.session.room.model.message.OptionItem
+import im.vector.matrix.android.api.session.room.model.message.getFileUrl
 import im.vector.matrix.android.api.session.room.send.SendService
 import im.vector.matrix.android.api.session.room.send.SendState
 import im.vector.matrix.android.api.session.room.timeline.TimelineEvent
@@ -59,7 +68,8 @@ internal class DefaultSendService @AssistedInject constructor(
         private val cryptoService: CryptoService,
         private val taskExecutor: TaskExecutor,
         private val localEchoRepository: LocalEchoRepository,
-        private val roomEventSender: RoomEventSender
+        private val roomEventSender: RoomEventSender,
+        private val cancelSendTracker: CancelSendTracker
 ) : SendService {
 
     @AssistedInject.Factory
@@ -135,36 +145,73 @@ internal class DefaultSendService @AssistedInject constructor(
     }
 
     override fun resendMediaMessage(localEcho: TimelineEvent): Cancelable? {
-        if (localEcho.root.isImageMessage() && localEcho.root.sendState.hasFailed()) {
+        if (localEcho.root.sendState.hasFailed()) {
             // TODO this need a refactoring of attachement sending
-//        val clearContent = localEcho.root.getClearContent()
-//        val messageContent = clearContent?.toModel<MessageContent>() ?: return null
-//        when (messageContent.type) {
-//            MessageType.MSGTYPE_IMAGE -> {
-//                val imageContent = clearContent.toModel<MessageImageContent>() ?: return null
-//                val url = imageContent.url ?: return null
-//                if (url.startsWith("mxc://")) {
-//                    //TODO
-//                } else {
-//                    //The image has not yet been sent
-//                    val attachmentData = ContentAttachmentData(
-//                            size = imageContent.info!!.size.toLong(),
-//                            mimeType = imageContent.info.mimeType!!,
-//                            width = imageContent.info.width.toLong(),
-//                            height = imageContent.info.height.toLong(),
-//                            name = imageContent.body,
-//                            path = imageContent.url,
-//                            type = ContentAttachmentData.Type.IMAGE
-//                    )
-//                    monarchy.runTransactionSync {
-//                        EventEntity.where(it,eventId = localEcho.root.eventId ?: "").findFirst()?.let {
-//                            it.sendState = SendState.UNSENT
-//                        }
-//                    }
-//                    return internalSendMedia(localEcho.root,attachmentData)
-//                }
-//            }
-//        }
+            val clearContent = localEcho.root.getClearContent()
+            val messageContent = clearContent?.toModel<MessageContent>() as? MessageWithAttachmentContent ?: return null
+
+            val url = messageContent.getFileUrl() ?: return null
+            if (url.startsWith("mxc://")) {
+                // We need to resend only the message as the attachment is ok
+                localEchoRepository.updateSendState(localEcho.eventId, SendState.UNSENT)
+                return sendEvent(localEcho.root)
+            }
+            // we need to resend the media
+
+            when (messageContent) {
+                is MessageImageContent -> {
+                    //The image has not yet been sent
+                    val attachmentData = ContentAttachmentData(
+                            size = messageContent.info!!.size.toLong(),
+                            mimeType = messageContent.info.mimeType!!,
+                            width = messageContent.info.width.toLong(),
+                            height = messageContent.info.height.toLong(),
+                            name = messageContent.body,
+                            queryUri = Uri.parse(messageContent.url),
+                            type = ContentAttachmentData.Type.IMAGE
+                    )
+                    localEchoRepository.updateSendState(localEcho.eventId, SendState.UNSENT)
+                    return internalSendMedia(listOf(localEcho.root), attachmentData, true)
+                }
+                is MessageVideoContent -> {
+                    val attachmentData = ContentAttachmentData(
+                            size = messageContent.videoInfo?.size ?: 0L,
+                            mimeType = messageContent.mimeType,
+                            width = messageContent.videoInfo?.width?.toLong(),
+                            height = messageContent.videoInfo?.height?.toLong(),
+                            duration = messageContent.videoInfo?.duration?.toLong(),
+                            name = messageContent.body,
+                            queryUri = Uri.parse(messageContent.url),
+                            type = ContentAttachmentData.Type.VIDEO
+                    )
+                    localEchoRepository.updateSendState(localEcho.eventId, SendState.UNSENT)
+                    return internalSendMedia(listOf(localEcho.root), attachmentData, true)
+                }
+                is MessageFileContent  -> {
+                    val attachmentData = ContentAttachmentData(
+                            size = messageContent.info!!.size,
+                            mimeType = messageContent.info.mimeType!!,
+                            name = messageContent.body,
+                            queryUri = Uri.parse(messageContent.url),
+                            type = ContentAttachmentData.Type.FILE
+                    )
+                    localEchoRepository.updateSendState(localEcho.eventId, SendState.UNSENT)
+                    return internalSendMedia(listOf(localEcho.root), attachmentData, true)
+                }
+                is MessageAudioContent -> {
+                    val attachmentData = ContentAttachmentData(
+                            size = messageContent.audioInfo?.size ?: 0,
+                            duration = messageContent.audioInfo?.duration?.toLong() ?: 0L,
+                            mimeType = messageContent.audioInfo?.mimeType,
+                            name = messageContent.body,
+                            queryUri = Uri.parse(messageContent.url),
+                            type = ContentAttachmentData.Type.AUDIO
+                    )
+                    localEchoRepository.updateSendState(localEcho.eventId, SendState.UNSENT)
+                    return internalSendMedia(listOf(localEcho.root), attachmentData, true)
+                }
+
+            }
             return null
         }
         return null
@@ -195,15 +242,33 @@ internal class DefaultSendService @AssistedInject constructor(
         }
     }
 
+    override fun cancelSend(eventId: String) {
+        cancelSendTracker.markLocalEchoForCancel(eventId, roomId)
+        taskExecutor.executorScope.launch {
+            localEchoRepository.deleteFailedEcho(roomId, eventId)
+        }
+    }
+
     override fun resendAllFailedMessages() {
         taskExecutor.executorScope.launch {
             val eventsToResend = localEchoRepository.getAllFailedEventsToResend(roomId)
             eventsToResend.forEach {
-                sendEvent(it)
+                if (it.root.isTextMessage()) {
+                    resendTextMessage(it)
+                } else if (it.root.isAttachmentMessage()) {
+                    resendMediaMessage(it)
+                }
             }
-            localEchoRepository.updateSendState(roomId, eventsToResend.mapNotNull { it.eventId }, SendState.UNSENT)
+            localEchoRepository.updateSendState(roomId, eventsToResend.map { it.eventId }, SendState.UNSENT)
         }
     }
+
+//    override fun failAllPendingMessages() {
+//        taskExecutor.executorScope.launch {
+//            val eventsToResend = localEchoRepository.getAllEventsWithStates(roomId, SendState.PENDING_STATES)
+//            localEchoRepository.updateSendState(roomId, eventsToResend.map { it.eventId }, SendState.UNDELIVERED)
+//        }
+//    }
 
     override fun sendMedia(attachment: ContentAttachmentData,
                            compressBeforeSending: Boolean,

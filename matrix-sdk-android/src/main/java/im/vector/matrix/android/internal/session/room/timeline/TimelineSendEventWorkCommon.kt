@@ -20,6 +20,8 @@ import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
 import androidx.work.ListenableWorker
 import androidx.work.OneTimeWorkRequest
+import androidx.work.WorkInfo
+import im.vector.matrix.android.api.session.room.Room
 import im.vector.matrix.android.api.util.Cancelable
 import im.vector.matrix.android.api.util.NoOpCancellable
 import im.vector.matrix.android.internal.di.WorkManagerProvider
@@ -56,7 +58,7 @@ internal class TimelineSendEventWorkCommon @Inject constructor(
         }
     }
 
-    fun postWork(roomId: String, workRequest: OneTimeWorkRequest, policy: ExistingWorkPolicy = ExistingWorkPolicy.APPEND): Cancelable {
+    fun postWork(roomId: String, workRequest: OneTimeWorkRequest, policy: ExistingWorkPolicy = ExistingWorkPolicy.APPEND_OR_REPLACE): Cancelable {
         workManagerProvider.workManager
                 .beginUniqueWork(buildWorkName(roomId), policy, workRequest)
                 .enqueue()

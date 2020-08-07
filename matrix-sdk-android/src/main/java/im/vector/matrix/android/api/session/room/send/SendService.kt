@@ -125,8 +125,12 @@ interface SendService {
 
     fun clearSendingQueue()
 
+
+    fun cancelSend(eventId: String)
+
     /**
      * Resend all failed messages one by one (and keep order)
      */
     fun resendAllFailedMessages()
+//    fun failAllPendingMessages()
 }

@@ -19,6 +19,7 @@ package im.vector.app.features.home.room.detail
 import android.net.Uri
 import androidx.annotation.IdRes
 import androidx.lifecycle.viewModelScope
+import androidx.work.WorkManager
 import com.airbnb.mvrx.FragmentViewModelContext
 import com.airbnb.mvrx.MvRxViewModelFactory
 import com.airbnb.mvrx.Success
@@ -51,7 +52,7 @@ import im.vector.matrix.android.api.query.QueryStringValue
 import im.vector.matrix.android.api.session.Session
 import im.vector.matrix.android.api.session.crypto.MXCryptoError
 import im.vector.matrix.android.api.session.events.model.EventType
-import im.vector.matrix.android.api.session.events.model.isImageMessage
+import im.vector.matrix.android.api.session.events.model.isAttachmentMessage
 import im.vector.matrix.android.api.session.events.model.isTextMessage
 import im.vector.matrix.android.api.session.events.model.toContent
 import im.vector.matrix.android.api.session.events.model.toModel
@@ -269,6 +270,7 @@ class RoomDetailViewModel @AssistedInject constructor(
             is RoomDetailAction.OpenIntegrationManager           -> handleOpenIntegrationManager()
             is RoomDetailAction.StartCall                        -> handleStartCall(action)
             is RoomDetailAction.EndCall                          -> handleEndCall()
+            is RoomDetailAction.CancelSend                       -> handleCancel(action)
         }.exhaustive
     }
 
@@ -419,7 +421,7 @@ class RoomDetailViewModel @AssistedInject constructor(
             R.id.clear_all           -> state.asyncRoomSummary()?.hasFailedSending == true
             R.id.open_matrix_apps    -> true
             R.id.voice_call,
-            R.id.video_call          -> state.asyncRoomSummary()?.canStartCall == true  && webRtcPeerConnectionManager.currentCall == null
+            R.id.video_call          -> state.asyncRoomSummary()?.canStartCall == true && webRtcPeerConnectionManager.currentCall == null
             R.id.hangup_call         -> webRtcPeerConnectionManager.currentCall != null
             else                     -> false
         }
@@ -937,9 +939,9 @@ class RoomDetailViewModel @AssistedInject constructor(
                 return
             }
             when {
-                it.root.isTextMessage()  -> room.resendTextMessage(it)
-                it.root.isImageMessage() -> room.resendMediaMessage(it)
-                else                     -> {
+                it.root.isTextMessage()       -> room.resendTextMessage(it)
+                it.root.isAttachmentMessage() -> room.resendMediaMessage(it)
+                else                          -> {
                     // TODO
                 }
             }
@@ -955,6 +957,18 @@ class RoomDetailViewModel @AssistedInject constructor(
                 return
             }
             room.deleteFailedEcho(it)
+        }
+    }
+
+    private fun handleCancel(action: RoomDetailAction.CancelSend) {
+        val targetEventId = action.eventId
+        room.getTimeLineEvent(targetEventId)?.let {
+            // State must be UNDELIVERED or Failed
+            if (!it.root.sendState.isSending()) {
+                Timber.e("Cannot resend message, it is not failed, Cancel first")
+                return
+            }
+            room.cancelSend(action.eventId)
         }
     }
 

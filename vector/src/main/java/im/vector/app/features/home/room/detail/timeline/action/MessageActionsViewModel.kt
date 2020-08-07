@@ -35,7 +35,12 @@ import im.vector.app.features.settings.VectorPreferences
 import im.vector.matrix.android.api.session.Session
 import im.vector.matrix.android.api.session.crypto.keysbackup.KeysBackupState
 import im.vector.matrix.android.api.session.events.model.EventType
+import im.vector.matrix.android.api.session.events.model.isAttachmentMessage
+import im.vector.matrix.android.api.session.events.model.isAudioMessage
+import im.vector.matrix.android.api.session.events.model.isFileMessage
+import im.vector.matrix.android.api.session.events.model.isImageMessage
 import im.vector.matrix.android.api.session.events.model.isTextMessage
+import im.vector.matrix.android.api.session.events.model.isVideoMessage
 import im.vector.matrix.android.api.session.events.model.toModel
 import im.vector.matrix.android.api.session.room.model.message.MessageContent
 import im.vector.matrix.android.api.session.room.model.message.MessageFormat
@@ -230,6 +235,14 @@ class MessageActionsViewModel @AssistedInject constructor(@Assisted
                     add(EventSharedAction.Resend(eventId))
                 }
                 add(EventSharedAction.Remove(eventId))
+                if (vectorPreferences.developerMode()) {
+                    add(EventSharedAction.ViewSource(timelineEvent.root.toContentStringWithIndent()))
+                    if (timelineEvent.isEncrypted() && timelineEvent.root.mxDecryptionResult != null) {
+                        val decryptedContent = timelineEvent.root.toClearContentStringWithIndent()
+                                ?: stringProvider.getString(R.string.encryption_information_decryption_error)
+                        add(EventSharedAction.ViewDecryptedSource(decryptedContent))
+                    }
+                }
             } else if (timelineEvent.root.sendState.isSending()) {
                 // TODO is uploading attachment?
                 if (canCancel(timelineEvent)) {
@@ -321,7 +334,7 @@ class MessageActionsViewModel @AssistedInject constructor(@Assisted
     }
 
     private fun canCancel(@Suppress("UNUSED_PARAMETER") event: TimelineEvent): Boolean {
-        return false
+        return true
     }
 
     private fun canReply(event: TimelineEvent, messageContent: MessageContent?, actionPermissions: ActionPermissions): Boolean {
@@ -365,7 +378,9 @@ class MessageActionsViewModel @AssistedInject constructor(@Assisted
     }
 
     private fun canRetry(event: TimelineEvent, actionPermissions: ActionPermissions): Boolean {
-        return event.root.sendState.hasFailed() && event.root.isTextMessage() && actionPermissions.canSendMessage
+        return event.root.sendState.hasFailed()
+                && actionPermissions.canSendMessage
+                && (event.root.isAttachmentMessage() || event.root.isTextMessage())
     }
 
     private fun canViewReactions(event: TimelineEvent): Boolean {

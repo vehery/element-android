@@ -57,7 +57,23 @@ internal class FileUploader @Inject constructor(@Authenticated
                            filename: String?,
                            mimeType: String?,
                            progressListener: ProgressRequestBody.Listener? = null): ContentUploadResponse {
-        val uploadBody = file.asRequestBody(mimeType?.toMediaTypeOrNull())
+
+        val uploadBody =  object : RequestBody() {
+
+            override fun contentLength()= file.length()
+
+            // Disable okhttp auto resend for 'large files'
+            override fun isOneShot()=  contentLength() == 0L || contentLength() >= 1000000
+
+            override fun contentType(): MediaType? {
+                return mimeType?.toMediaTypeOrNull()
+            }
+
+            override fun writeTo(sink: BufferedSink) {
+                file.source().use { sink.writeAll(it) }
+            }
+        }
+
         return upload(uploadBody, filename, progressListener)
     }
 
@@ -73,7 +89,14 @@ internal class FileUploader @Inject constructor(@Authenticated
                                 filename: String?,
                                 mimeType: String?,
                                 progressListener: ProgressRequestBody.Listener? = null): ContentUploadResponse {
+        val length = inputStream.available().toLong()
         val uploadBody =  object : RequestBody() {
+
+            override fun contentLength() = length
+
+            // Disable okhttp auto resend for 'large files'
+            override fun isOneShot()=  contentLength() == 0L || contentLength() >= 1000000
+
             override fun contentType(): MediaType? {
                return mimeType?.toMediaTypeOrNull()
             }

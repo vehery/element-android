@@ -18,6 +18,7 @@ package im.vector.matrix.android.internal.session.room.send
 
 import android.content.Context
 import androidx.work.CoroutineWorker
+import androidx.work.Worker
 import androidx.work.WorkerParameters
 import com.squareup.moshi.JsonClass
 import im.vector.matrix.android.api.failure.shouldBeRetried
@@ -26,14 +27,17 @@ import im.vector.matrix.android.api.session.room.send.SendState
 import im.vector.matrix.android.internal.database.mapper.ContentMapper
 import im.vector.matrix.android.internal.network.executeRequest
 import im.vector.matrix.android.internal.session.room.RoomAPI
+import im.vector.matrix.android.internal.task.TaskExecutor
 import im.vector.matrix.android.internal.worker.SessionWorkerParams
 import im.vector.matrix.android.internal.worker.WorkerParamsFactory
 import im.vector.matrix.android.internal.worker.getSessionComponent
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.greenrobot.eventbus.EventBus
 import timber.log.Timber
 import javax.inject.Inject
 
-private const val MAX_NUMBER_OF_RETRY_BEFORE_FAILING = 3
+//private const val MAX_NUMBER_OF_RETRY_BEFORE_FAILING = 3
 
 /**
  * Possible previous worker: [EncryptEventWorker] or first worker
@@ -68,12 +72,12 @@ internal class SendEventWorker(context: Context,
     @Inject lateinit var localEchoRepository: LocalEchoRepository
     @Inject lateinit var roomAPI: RoomAPI
     @Inject lateinit var eventBus: EventBus
+    @Inject lateinit var cancelSendTracker: CancelSendTracker
 
     override suspend fun doWork(): Result {
         val params = WorkerParamsFactory.fromData<Params>(inputData)
                 ?: return Result.success()
-                        .also { Timber.e("Unable to parse work parameters") }
-
+                        .also { Timber.e("## SendEvent: Unable to parse work parameters") }
         val sessionComponent = getSessionComponent(params.sessionId) ?: return Result.success()
         sessionComponent.inject(this)
         if (params.eventId == null || params.roomId == null || params.type == null) {
@@ -83,22 +87,33 @@ internal class SendEventWorker(context: Context,
             }
             return Result.success()
         }
+
+        if (cancelSendTracker.isCancelRequestedFor(params.eventId, params.roomId)) {
+            return Result.success()
+                    .also {
+                        cancelSendTracker.markCancelled(params.eventId, params.roomId)
+                        Timber.e("## SendEvent: Event sending has been cancelled ${params.eventId}")
+                    }
+        }
+
         if (params.lastFailureMessage != null) {
             localEchoRepository.updateSendState(params.eventId, SendState.UNDELIVERED)
             // Transmit the error
             return Result.success(inputData)
                     .also { Timber.e("Work cancelled due to input error from parent") }
         }
+
+        Timber.v("## SendEvent: [${System.currentTimeMillis()}] Send event ${params.eventId}")
         return try {
             sendEvent(params.eventId, params.roomId, params.type, params.contentStr)
             Result.success()
         } catch (exception: Throwable) {
-            // It does start from 0, we want it to stop if it fails the third time
-            val currentAttemptCount = runAttemptCount + 1
-            if (currentAttemptCount >= MAX_NUMBER_OF_RETRY_BEFORE_FAILING || !exception.shouldBeRetried()) {
+            if (/*currentAttemptCount >= MAX_NUMBER_OF_RETRY_BEFORE_FAILING ||**/ !exception.shouldBeRetried()) {
+                Timber.e("## SendEvent: [${System.currentTimeMillis()}]  Send event Failed cannot retry ${params.eventId} > ${exception.localizedMessage}")
                 localEchoRepository.updateSendState(params.eventId, SendState.UNDELIVERED)
                 return Result.success()
             } else {
+                Timber.e("## SendEvent: [${System.currentTimeMillis()}]  Send event Failed schedule retry ${params.eventId} > ${exception.localizedMessage}")
                 Result.retry()
             }
         }

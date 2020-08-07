@@ -34,6 +34,10 @@ internal class ProgressRequestBody(private val delegate: RequestBody,
         return delegate.contentType()
     }
 
+    override fun isOneShot() = delegate.isOneShot()
+
+    override fun isDuplex() = delegate.isOneShot()
+
     override fun contentLength(): Long {
         try {
             return delegate.contentLength()
