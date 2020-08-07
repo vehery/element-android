@@ -160,7 +160,7 @@ internal class DefaultSendService @AssistedInject constructor(
 
             when (messageContent) {
                 is MessageImageContent -> {
-                    //The image has not yet been sent
+                    // The image has not yet been sent
                     val attachmentData = ContentAttachmentData(
                             size = messageContent.info!!.size.toLong(),
                             mimeType = messageContent.info.mimeType!!,
@@ -210,7 +210,6 @@ internal class DefaultSendService @AssistedInject constructor(
                     localEchoRepository.updateSendState(localEcho.eventId, SendState.UNSENT)
                     return internalSendMedia(listOf(localEcho.root), attachmentData, true)
                 }
-
             }
             return null
         }

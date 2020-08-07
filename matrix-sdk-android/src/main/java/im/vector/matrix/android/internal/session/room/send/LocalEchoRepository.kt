@@ -29,7 +29,6 @@ import im.vector.matrix.android.internal.crypto.MXEventDecryptionResult
 import im.vector.matrix.android.internal.database.helper.nextId
 import im.vector.matrix.android.internal.database.mapper.ContentMapper
 import im.vector.matrix.android.internal.database.mapper.TimelineEventMapper
-import im.vector.matrix.android.internal.database.mapper.asDomain
 import im.vector.matrix.android.internal.database.mapper.toEntity
 import im.vector.matrix.android.internal.database.model.EventEntity
 import im.vector.matrix.android.internal.database.model.EventInsertEntity
@@ -113,7 +112,7 @@ internal class LocalEchoRepository @Inject constructor(@SessionDatabase private 
     }
 
     suspend fun deleteFailedEcho(roomId: String, localEcho: TimelineEvent) {
-        deleteFailedEcho(roomId,localEcho.eventId)
+        deleteFailedEcho(roomId, localEcho.eventId)
     }
 
     suspend fun deleteFailedEcho(roomId: String, eventId: String?) {
@@ -149,13 +148,12 @@ internal class LocalEchoRepository @Inject constructor(@SessionDatabase private 
         return getAllEventsWithStates(roomId, SendState.HAS_FAILED_STATES)
     }
 
-
     fun getAllEventsWithStates(roomId: String, states : List<SendState>): List<TimelineEvent> {
         return Realm.getInstance(monarchy.realmConfiguration).use { realm ->
             TimelineEventEntity
                     .findAllInRoomWithSendStates(realm, roomId, states)
                     .sortedByDescending { it.displayIndex }
-                    .mapNotNull { it?.let { timelineEventMapper.map(it)} }
+                    .mapNotNull { it?.let { timelineEventMapper.map(it) } }
                     .filter { event ->
                         when (event.root.getClearType()) {
                             EventType.MESSAGE,

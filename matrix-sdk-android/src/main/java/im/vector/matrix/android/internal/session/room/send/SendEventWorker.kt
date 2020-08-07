@@ -18,7 +18,6 @@ package im.vector.matrix.android.internal.session.room.send
 
 import android.content.Context
 import androidx.work.CoroutineWorker
-import androidx.work.Worker
 import androidx.work.WorkerParameters
 import com.squareup.moshi.JsonClass
 import im.vector.matrix.android.api.failure.shouldBeRetried
@@ -27,17 +26,14 @@ import im.vector.matrix.android.api.session.room.send.SendState
 import im.vector.matrix.android.internal.database.mapper.ContentMapper
 import im.vector.matrix.android.internal.network.executeRequest
 import im.vector.matrix.android.internal.session.room.RoomAPI
-import im.vector.matrix.android.internal.task.TaskExecutor
 import im.vector.matrix.android.internal.worker.SessionWorkerParams
 import im.vector.matrix.android.internal.worker.WorkerParamsFactory
 import im.vector.matrix.android.internal.worker.getSessionComponent
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import org.greenrobot.eventbus.EventBus
 import timber.log.Timber
 import javax.inject.Inject
 
-//private const val MAX_NUMBER_OF_RETRY_BEFORE_FAILING = 3
+// private const val MAX_NUMBER_OF_RETRY_BEFORE_FAILING = 3
 
 /**
  * Possible previous worker: [EncryptEventWorker] or first worker

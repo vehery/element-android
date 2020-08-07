@@ -173,7 +173,6 @@ internal class UploadContentWorker(val context: Context, params: WorkerParameter
             var uploadedFileEncryptedFileInfo: EncryptedFileInfo? = null
 
             return try {
-
                 var modifiedStream: InputStream
 
                 if (attachment.type == ContentAttachmentData.Type.IMAGE && params.compressBeforeSending) {
@@ -213,7 +212,7 @@ internal class UploadContentWorker(val context: Context, params: WorkerParameter
                 } else {
                     // Unfortunatly the original stream is not always able to provide content length
                     // by passing by a temp copy it's working (better experience for upload progress..)
-                    modifiedStream = if (tryThis { inputStream.available()} ?: 0 <= 0) {
+                    modifiedStream = if (tryThis { inputStream.available() } ?: 0 <= 0) {
                         val tmp = File.createTempFile(UUID.randomUUID().toString(), null, context.cacheDir)
                         tmp.outputStream().use {
                             inputStream.copyTo(it)

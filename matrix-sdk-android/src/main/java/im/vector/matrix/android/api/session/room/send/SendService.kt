@@ -125,7 +125,6 @@ interface SendService {
 
     fun clearSendingQueue()
 
-
     fun cancelSend(eventId: String)
 
     /**

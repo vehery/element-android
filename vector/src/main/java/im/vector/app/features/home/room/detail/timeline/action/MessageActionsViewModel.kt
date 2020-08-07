@@ -36,11 +36,7 @@ import im.vector.matrix.android.api.session.Session
 import im.vector.matrix.android.api.session.crypto.keysbackup.KeysBackupState
 import im.vector.matrix.android.api.session.events.model.EventType
 import im.vector.matrix.android.api.session.events.model.isAttachmentMessage
-import im.vector.matrix.android.api.session.events.model.isAudioMessage
-import im.vector.matrix.android.api.session.events.model.isFileMessage
-import im.vector.matrix.android.api.session.events.model.isImageMessage
 import im.vector.matrix.android.api.session.events.model.isTextMessage
-import im.vector.matrix.android.api.session.events.model.isVideoMessage
 import im.vector.matrix.android.api.session.events.model.toModel
 import im.vector.matrix.android.api.session.room.model.message.MessageContent
 import im.vector.matrix.android.api.session.room.model.message.MessageFormat

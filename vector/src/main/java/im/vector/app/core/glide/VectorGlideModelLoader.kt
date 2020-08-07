@@ -26,11 +26,9 @@ import com.bumptech.glide.load.model.MultiModelLoaderFactory
 import com.bumptech.glide.signature.ObjectKey
 import im.vector.app.core.di.ActiveSessionHolder
 import im.vector.app.features.media.ImageContentRenderer
-import im.vector.matrix.android.api.Matrix
 import im.vector.matrix.android.api.MatrixCallback
 import im.vector.matrix.android.api.session.file.FileService
 import okhttp3.OkHttpClient
-import okhttp3.Request
 import timber.log.Timber
 import java.io.File
 import java.io.FileInputStream

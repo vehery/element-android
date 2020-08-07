@@ -32,7 +32,6 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
-import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okio.BufferedSink
 import okio.source
@@ -57,13 +56,11 @@ internal class FileUploader @Inject constructor(@Authenticated
                            filename: String?,
                            mimeType: String?,
                            progressListener: ProgressRequestBody.Listener? = null): ContentUploadResponse {
-
         val uploadBody =  object : RequestBody() {
-
-            override fun contentLength()= file.length()
+            override fun contentLength() = file.length()
 
             // Disable okhttp auto resend for 'large files'
-            override fun isOneShot()=  contentLength() == 0L || contentLength() >= 1000000
+            override fun isOneShot() =  contentLength() == 0L || contentLength() >= 1000000
 
             override fun contentType(): MediaType? {
                 return mimeType?.toMediaTypeOrNull()
@@ -91,11 +88,10 @@ internal class FileUploader @Inject constructor(@Authenticated
                                 progressListener: ProgressRequestBody.Listener? = null): ContentUploadResponse {
         val length = inputStream.available().toLong()
         val uploadBody =  object : RequestBody() {
-
             override fun contentLength() = length
 
             // Disable okhttp auto resend for 'large files'
-            override fun isOneShot()=  contentLength() == 0L || contentLength() >= 1000000
+            override fun isOneShot() =  contentLength() == 0L || contentLength() >= 1000000
 
             override fun contentType(): MediaType? {
                return mimeType?.toMediaTypeOrNull()
