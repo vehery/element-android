@@ -20,6 +20,7 @@ import android.os.MemoryFile
 import android.util.Base64
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import im.vector.matrix.android.internal.crypto.attachments.MXEncryptedAttachments
+import im.vector.matrix.android.internal.crypto.attachments.toElementToDecrypt
 import im.vector.matrix.android.internal.crypto.model.rest.EncryptedFileInfo
 import im.vector.matrix.android.internal.crypto.model.rest.EncryptedFileKey
 import org.junit.Assert.assertEquals
@@ -53,7 +54,7 @@ class AttachmentEncryptionTest {
             memoryFile.inputStream
         }
 
-        val decryptedStream = MXEncryptedAttachments.decryptAttachment(inputStream, encryptedFileInfo)
+        val decryptedStream = MXEncryptedAttachments.decryptAttachment(inputStream, encryptedFileInfo.toElementToDecrypt()!!)
 
         assertNotNull(decryptedStream)
 
