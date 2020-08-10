@@ -34,6 +34,7 @@ import im.vector.app.core.glide.GlideApp
 import im.vector.app.core.glide.GlideRequest
 import im.vector.app.core.glide.GlideRequests
 import im.vector.app.core.utils.getColorFromUserId
+import im.vector.matrix.android.api.extensions.tryThis
 import im.vector.matrix.android.api.session.content.ContentUrlResolver
 import im.vector.matrix.android.api.util.MatrixItem
 import javax.inject.Inject
@@ -54,6 +55,11 @@ class AvatarRenderer @Inject constructor(private val activeSessionHolder: Active
                 GlideApp.with(imageView),
                 matrixItem,
                 DrawableImageViewTarget(imageView))
+    }
+
+    fun clear(imageView: ImageView) {
+        // It can be called after recycler view is destroyed, just silently catch
+        tryThis {  GlideApp.with(imageView).clear(imageView) }
     }
 
     @UiThread

@@ -36,6 +36,7 @@ import im.vector.app.core.glide.GlideRequest
 import im.vector.app.core.ui.model.Size
 import im.vector.app.core.utils.DimensionConverter
 import im.vector.app.core.utils.isLocalFile
+import im.vector.matrix.android.api.extensions.tryThis
 import im.vector.matrix.android.api.session.content.ContentUrlResolver
 import im.vector.matrix.android.internal.crypto.attachments.ElementToDecrypt
 import kotlinx.android.parcel.Parcelize
@@ -101,6 +102,15 @@ class ImageContentRenderer @Inject constructor(private val activeSessionHolder: 
                 .transform(RoundedCorners(dimensionConverter.dpToPx(8)))
                 .thumbnail(0.3f)
                 .into(imageView)
+    }
+
+    fun clear(imageView: ImageView) {
+        // It can be called after recycler view is destroyed, just silently catch
+        // We'd better keep ref to requestManager, but we don't have it
+        tryThis {
+            GlideApp
+                    .with(imageView).clear(imageView)
+        }
     }
 
     fun render(data: Data, contextView: View, target: CustomViewTarget<*, Drawable>) {
