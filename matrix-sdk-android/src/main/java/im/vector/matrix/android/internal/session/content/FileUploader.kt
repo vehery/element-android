@@ -60,7 +60,7 @@ internal class FileUploader @Inject constructor(@Authenticated
             override fun contentLength() = file.length()
 
             // Disable okhttp auto resend for 'large files'
-            override fun isOneShot() =  contentLength() == 0L || contentLength() >= 1000000
+            override fun isOneShot() =  contentLength() == 0L || contentLength() >= 1_000_000
 
             override fun contentType(): MediaType? {
                 return mimeType?.toMediaTypeOrNull()
@@ -91,7 +91,7 @@ internal class FileUploader @Inject constructor(@Authenticated
             override fun contentLength() = length
 
             // Disable okhttp auto resend for 'large files'
-            override fun isOneShot() =  contentLength() == 0L || contentLength() >= 1000000
+            override fun isOneShot() =  contentLength() == 0L || contentLength() >= 1_000_000
 
             override fun contentType(): MediaType? {
                return mimeType?.toMediaTypeOrNull()
