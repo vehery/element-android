@@ -57,6 +57,13 @@ import im.vector.app.features.pin.PinCodeStore
 import im.vector.app.features.pin.PinLocker
 import im.vector.app.features.pin.PinMode
 import im.vector.app.features.themes.ThemeUtils
+import im.vector.matrix.android.api.MatrixCallback
+import im.vector.matrix.android.internal.crypto.crosssigning.isVerified
+import im.vector.matrix.android.internal.crypto.model.ImportRoomKeysResult
+import im.vector.matrix.android.internal.crypto.model.rest.DeviceInfo
+import im.vector.matrix.android.internal.crypto.model.rest.DevicesListResponse
+import im.vector.matrix.rx.SecretsSynchronisationInfo
+import im.vector.matrix.rx.rx
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.Disposable
 import me.gujun.android.span.span
@@ -305,6 +312,10 @@ class VectorSettingsSecurityPrivacyFragment @Inject constructor(
         }
 
         mCrossSigningStatePreference.isVisible = true
+        if (!vectorPreferences.developerMode()) {
+            // When not in developer mode, intercept click on this preference
+            mCrossSigningStatePreference.onPreferenceClickListener = Preference.OnPreferenceClickListener { true }
+        }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
