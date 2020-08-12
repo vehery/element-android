@@ -419,7 +419,7 @@ class RoomDetailViewModel @AssistedInject constructor(
             R.id.clear_all           -> state.asyncRoomSummary()?.hasFailedSending == true
             R.id.open_matrix_apps    -> true
             R.id.voice_call,
-            R.id.video_call          -> state.asyncRoomSummary()?.canStartCall == true  && webRtcPeerConnectionManager.currentCall == null
+            R.id.video_call          -> state.asyncRoomSummary()?.canStartCall == true && webRtcPeerConnectionManager.currentCall == null
             R.id.hangup_call         -> webRtcPeerConnectionManager.currentCall != null
             else                     -> false
         }
@@ -531,14 +531,6 @@ class RoomDetailViewModel @AssistedInject constructor(
                                 }
                             }
                             room.sendTextMessage(sequence)
-                            _viewEvents.post(RoomDetailViewEvents.SlashCommandHandled())
-                            popDraft()
-                        }
-                        is ParsedCommand.VerifyUser               -> {
-                            session
-                                    .cryptoService()
-                                    .verificationService()
-                                    .requestKeyVerificationInDMs(supportedVerificationMethodsProvider.provide(), slashCommandResult.userId, room.roomId)
                             _viewEvents.post(RoomDetailViewEvents.SlashCommandHandled())
                             popDraft()
                         }
