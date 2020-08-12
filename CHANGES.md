@@ -6,6 +6,7 @@ Features ✨:
 
 Improvements 🙌:
  - Give user the possibility to prevent accidental call (#1869)
+ - Do not propose to verify session if there is only one session (#1901)
 
 Bugfix 🐛:
  - Fix invisible toolbar (Status.im theme) (#1746)

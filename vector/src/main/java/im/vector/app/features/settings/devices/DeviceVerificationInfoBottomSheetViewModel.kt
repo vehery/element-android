@@ -21,12 +21,12 @@ import com.airbnb.mvrx.MvRxViewModelFactory
 import com.airbnb.mvrx.ViewModelContext
 import com.squareup.inject.assisted.Assisted
 import com.squareup.inject.assisted.AssistedInject
-import im.vector.matrix.android.api.session.Session
-import im.vector.matrix.android.internal.crypto.model.rest.DeviceInfo
-import im.vector.matrix.rx.rx
 import im.vector.app.core.platform.EmptyAction
 import im.vector.app.core.platform.EmptyViewEvents
 import im.vector.app.core.platform.VectorViewModel
+import im.vector.matrix.android.api.session.Session
+import im.vector.matrix.android.internal.crypto.model.rest.DeviceInfo
+import im.vector.matrix.rx.rx
 
 class DeviceVerificationInfoBottomSheetViewModel @AssistedInject constructor(@Assisted initialState: DeviceVerificationInfoBottomSheetViewState,
                                                                              @Assisted val deviceId: String,
@@ -62,6 +62,14 @@ class DeviceVerificationInfoBottomSheetViewModel @AssistedInject constructor(@As
                     copy(
                             cryptoDeviceInfo = it,
                             isMine = it.invoke()?.deviceId == session.sessionParams.deviceId
+                    )
+                }
+
+        session.rx().liveUserCryptoDevices(session.myUserId)
+                .map { it.size }
+                .execute {
+                    copy(
+                            hasOtherSessions = it.invoke() ?: 0 > 1
                     )
                 }
 
